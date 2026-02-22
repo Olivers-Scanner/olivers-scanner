@@ -1398,6 +1398,41 @@ const TRAD_MAP = {
 }
 
 // ── Unified fetch dispatcher ───────────────────────────────────
+
+// ── FINNHUB ──────────────────────────────────────────────────
+const FINNHUB_MAP = {
+  'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM',
+  'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
+  'META':'META','GOOGL':'GOOGL','AMD':'AMD',
+  'EURUSD':'OANDA:EUR_USD','GBPUSD':'OANDA:GBP_USD','USDJPY':'OANDA:USD_JPY',
+  'XAUUSD':'OANDA:XAU_USD','XAGUSD':'OANDA:XAG_USD',
+  'BTCUSD':'BINANCE:BTCUSDT','ETHUSD':'BINANCE:ETHUSDT','SOLUSD':'BINANCE:SOLUSDT',
+  'NQ1!':'QQQ','ES1!':'SPY','CL1!':'USO','GC1!':'GLD'
+}
+
+async function fetchFinnhub(sym) {
+  const fsym = FINNHUB_MAP[sym] || sym
+  const type = getSymType(sym)
+  const now  = Math.floor(Date.now()/1000)
+  const from = now - 30*86400
+  let url = ''
+  if (type === 'forex') {
+    url = `https://finnhub.io/api/v1/forex/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+  } else if (type === 'crypto') {
+    url = `https://finnhub.io/api/v1/crypto/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+  } else {
+    url = `https://finnhub.io/api/v1/stock/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+  }
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
+    if (!res.ok) { console.warn('Finnhub HTTP', res.status, fsym); return null }
+    const data = await res.json()
+    if (!data.c || data.s === 'no_data' || data.c.length === 0) { console.warn('Finnhub no data:', fsym); return null }
+    console.log(`Finnhub ✓ ${fsym}: ${data.c.length} bars`)
+    return data.c.map((c,i) => ({ c, o: data.o[i], h: data.h[i], l: data.l[i] }))
+  } catch(e) { console.warn('Finnhub error:', fsym, e.message); return null }
+}
+
 async function fetchSymbolLive(sym) {
   switch(currentProvider) {
     case 'finage':     return await fetchFinage(sym)
