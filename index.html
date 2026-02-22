@@ -1474,57 +1474,49 @@ async function fetchSymbolData(sym) {
 }
 
 async function fetchLiveData() {
-  // Get all unique symbols
-  const allSyms = []
-  SECTIONS.forEach(sec => sec.syms.forEach(s => allSyms.push(s)))
-  
-  // Fetch in batches of 5 to avoid rate limits
+  if (!scanningActive) return
+  const allSyms = SECTIONS.flatMap(s => s.syms)
   let successCount = 0
-  for (let i = 0; i < allSyms.length; i += 5) {
-    const batch = allSyms.slice(i, i+5)
-    await Promise.all(batch.map(async s => {
-      const bars = await fetchSymbolLive(s.sym)
-      if (bars && bars.length >= 10) {
-        // Store the close prices in hist (maintaining compatibility)
-        hist[s.sym] = bars.map(b => b.c)
-        // Also store full OHLCV for better filter computation
-        histFull[s.sym] = bars
-        successCount++
+
+  document.getElementById('live-indicator').textContent = `◌ Fetching ${currentProvider}...`
+  document.getElementById('live-indicator').style.color = '#ffe600'
+
+  // Fetch ALL symbols in PARALLEL — much faster
+  const results = await Promise.allSettled(
+    allSyms.map(async s => {
+      try {
+        const bars = await Promise.race([
+          fetchSymbolLive(s.sym),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
+        ])
+        if (bars && bars.length >= 5) {
+          hist[s.sym] = bars.map(b => b.c)
+          histFull[s.sym] = bars
+          successCount++
+          return true
+        }
+        return false
+      } catch(e) {
+        console.warn('Failed:', s.sym, e.message)
+        return false
       }
-    }))
-    // Small delay between batches
-    if (i + 5 < allSyms.length) await new Promise(r => setTimeout(r, 500))
-  }
-  
+    })
+  )
+
   if (successCount > 0) {
-    liveMode = true
     demoMode = false
     document.getElementById('live-indicator').textContent = `● LIVE  ${successCount}/${allSyms.length} symbols`
     document.getElementById('live-indicator').style.color = '#00ff88'
-    lastFetchTime = Date.now()
-    runScan()
-    renderAll()
-    updateLegendTime()
   } else {
-    document.getElementById('live-indicator').textContent = '● DEMO (market closed — use Yahoo Finance)'
-    if (currentProvider !== 'yahoo') {
-      document.getElementById('live-indicator').style.color = '#ff4444'
-      // Auto-suggest switching to yahoo
-      setTimeout(() => {
-        if (!scanningActive) return
-        if (confirm('⚠️ ' + currentProvider + ' is being blocked by your browser.\n\nSwitch to Yahoo Finance instead? It works without any API key and provides real prices.')) {
-          currentProvider = 'yahoo'
-          localStorage.setItem('ov_provider', 'yahoo')
-          fetchLiveData()
-        }
-      }, 1000)
-    }
+    demoMode = true
+    document.getElementById('live-indicator').textContent = `● DEMO (${currentProvider} — no data)`
     document.getElementById('live-indicator').style.color = '#888'
   }
+
+  runScan()
+  renderAll()
 }
 
-// Full OHLCV history for better filter computation
-const histFull = {}
 
 async function startLiveData() {
   // Don't auto-start — wait for user to click START
@@ -1537,7 +1529,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v7_LIVE.html"
+  a.download = "Olivers_Scanner_v8_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
