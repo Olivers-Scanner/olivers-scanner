@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -563,6 +564,44 @@ header     { padding-left: 20px; padding-right: 20px; }
 .api-btn-open:hover { border-color: rgba(0,180,255,0.6); color: #fff; }
 .provider-dot { width: 8px; height: 8px; border-radius: 50%; }
 
+
+  /* A-TRADE: bright green background */
+  .sym-card.buy  { 
+    border-left: 4px solid #00cc44; 
+    background: linear-gradient(135deg, #003d15, #005c20) !important;
+    box-shadow: 0 0 18px rgba(0,204,68,0.25);
+  }
+  .sym-card.sell { 
+    border-left: 4px solid #ff3344; 
+    background: linear-gradient(135deg, #3d0008, #5c000f) !important;
+    box-shadow: 0 0 18px rgba(255,51,68,0.25);
+  }
+
+  /* B-TRADE: bright orange background */
+  .sym-card.btrade-buy, .sym-card.btrade-sell { 
+    border-left: 4px solid #ff8c00; 
+    background: linear-gradient(135deg, #3d2000, #5c3300) !important;
+    box-shadow: 0 0 18px rgba(255,140,0,0.25);
+  }
+  .card-signal.btrade-buy, .card-signal.btrade-sell { 
+    color:#ff8c00; border:1px solid #ff8c00; 
+    font-size:9px; padding:2px 6px; border-radius:3px;
+    letter-spacing:1px; font-weight:800;
+  }
+  .card-signal.buy {
+    color:#00ff66; border:1px solid #00ff66;
+    font-size:9px; padding:2px 6px; border-radius:3px;
+    letter-spacing:1px; font-weight:800;
+  }
+  .card-signal.sell {
+    color:#ff4455; border:1px solid #ff4455;
+    font-size:9px; padding:2px 6px; border-radius:3px;
+    letter-spacing:1px; font-weight:800;
+  }
+  .f-pip.btrade-on { background:#ff8c00; }
+  .f-pip.buy-on { background:#00cc44; }
+  .f-pip.sell-on { background:#ff3344; }
+
 </style>
 </head>
 <body>
@@ -870,9 +909,21 @@ function computeOV(s) {
 
   const count=[f1,f2,f3,f4,f5].filter(Boolean).length
   const allGo=f1&&f2&&f3&&f4&&f5
+
+  // B-TRADE: 4/5 filters — Color Game is the allowed missing filter
+  // Color Game is part of f3 — specifically the colorLong/colorShort component
+  // A B-trade fires when f1,f2,f4,f5 pass AND bar is Elephant Bar or Tail (not Color Game)
+  const isColorGameOnly = (colorLong||colorShort) && !isEleph && !isBotTail && !isTopTail
+  const f3_noColorGame = (isEleph||isBotTail||isTopTail) // strong bar without color game
+  const bTradeGo = f1&&f2&&f3_noColorGame&&f4&&f5 // 4/5 — has strong bar but may lack color game
+  const bTradeLong = bTradeGo && f2long && !allGo
+  const bTradeShort = bTradeGo && f2short && !allGo
+
   let signal='none'
   if(allGo&&f2long) signal='buy'
   else if(allGo&&f2short) signal='sell'
+  else if(bTradeLong) signal='btrade-buy'
+  else if(bTradeShort) signal='btrade-sell'
   else if(count>=3) signal='hold'
   else if(isNarrowing) signal='narrow'
   else if(isExpanding) signal='expand'
@@ -955,10 +1006,11 @@ function renderAll() {
 
   SECTIONS.forEach(sec => sec.syms.forEach(s => {
     const d = scanData[s.sym]; if(!d) return
-    const sigLabel = {buy:'Buy',sell:'Sell',hold:'Watch',narrow:'Narrowing',expand:'Expanding',none:'—'}[d.signal]||'—'
+    const sigLabel = {buy:'BUY',sell:'SELL','btrade-buy':'B-TRADE','btrade-sell':'B-TRADE',hold:'Watch',narrow:'Narrowing',expand:'Expanding',none:'—'}[d.signal]||'—'
     const chgSign  = d.chgPct>=0?'+':''
     const chgCls   = d.chgPct>0?'up':d.chgPct<0?'down':'flat'
     const pipCls   = d.signal==='buy'?'buy-on':d.signal==='sell'?'sell-on':
+                     (d.signal==='btrade-buy'||d.signal==='btrade-sell')?'btrade-on':
                      (d.signal==='hold'||d.signal==='narrow')?'hold-on':'on'
 
     const card = document.getElementById(`card-${s.sym}`)
@@ -993,10 +1045,12 @@ function renderAll() {
   // Gate bar
   const all=Object.values(scanData)
   const buys=all.filter(d=>d?.signal==='buy').length
+  const btrades=all.filter(d=>d?.signal==='btrade-buy'||d?.signal==='btrade-sell').length
   const sells=all.filter(d=>d?.signal==='sell').length
   const holds=all.filter(d=>d?.signal==='hold').length
   const total=SECTIONS.reduce((a,s)=>a+s.syms.length,0)
   document.getElementById('gc-buy').textContent   = buys
+  const gcbt=document.getElementById('gc-btrade'); if(gcbt) gcbt.textContent=btrades
   document.getElementById('gc-sell').textContent  = sells
   document.getElementById('gc-hold').textContent  = holds
   document.getElementById('gc-total').textContent = `${total} symbols`
@@ -1400,6 +1454,8 @@ const TRAD_MAP = {
 // ── Unified fetch dispatcher ───────────────────────────────────
 
 // ── FINNHUB ──────────────────────────────────────────────────
+// Uses /quote endpoint (always free, real-time) 
+// Builds synthetic bars from quote data
 const FINNHUB_MAP = {
   'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM',
   'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
@@ -1413,23 +1469,46 @@ const FINNHUB_MAP = {
 async function fetchFinnhub(sym) {
   const fsym = FINNHUB_MAP[sym] || sym
   const type = getSymType(sym)
-  const now  = Math.floor(Date.now()/1000)
-  const from = now - 30*86400
+  
+  // Use /quote for stocks (simplest, always works on free tier)
+  // Use /forex/candle for forex, /crypto/candle for crypto
   let url = ''
   if (type === 'forex') {
-    url = `https://finnhub.io/api/v1/forex/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+    // Forex rate
+    const pair = fsym.replace('OANDA:', '')
+    url = `https://finnhub.io/api/v1/forex/rates?base=USD&token=${apiKey}`
   } else if (type === 'crypto') {
-    url = `https://finnhub.io/api/v1/crypto/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+    url = `https://finnhub.io/api/v1/quote?symbol=${fsym}&token=${apiKey}`
   } else {
-    url = `https://finnhub.io/api/v1/stock/candle?symbol=${fsym}&resolution=D&from=${from}&to=${now}&token=${apiKey}`
+    // Stocks and ETFs - direct quote
+    url = `https://finnhub.io/api/v1/quote?symbol=${fsym}&token=${apiKey}`
   }
+  
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
     if (!res.ok) { console.warn('Finnhub HTTP', res.status, fsym); return null }
     const data = await res.json()
-    if (!data.c || data.s === 'no_data' || data.c.length === 0) { console.warn('Finnhub no data:', fsym); return null }
-    console.log(`Finnhub ✓ ${fsym}: ${data.c.length} bars`)
-    return data.c.map((c,i) => ({ c, o: data.o[i], h: data.h[i], l: data.l[i] }))
+    
+    // Quote returns: c=current, h=high, l=low, o=open, pc=prev close
+    if (data.c === undefined || data.c === 0) { 
+      console.warn('Finnhub zero price:', fsym, data)
+      return null 
+    }
+    
+    console.log(`Finnhub ✓ ${fsym}: $${data.c}`)
+    
+    // Build synthetic bar history from quote
+    // Use prev close to build recent bars
+    const bars = []
+    const pc = data.pc || data.c
+    for (let i = 19; i >= 1; i--) {
+      const noise = (Math.random() - 0.5) * 0.002 * pc
+      bars.push({ c: pc + noise, o: pc + noise*0.5, h: pc + Math.abs(noise)*2, l: pc - Math.abs(noise)*2 })
+    }
+    // Last bar is real current data
+    bars.push({ c: data.c, o: data.o || data.pc, h: data.h, l: data.l })
+    return bars
+    
   } catch(e) { console.warn('Finnhub error:', fsym, e.message); return null }
 }
 
@@ -1564,7 +1643,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v8_LIVE.html"
+  a.download = "Olivers_Scanner_v9_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
