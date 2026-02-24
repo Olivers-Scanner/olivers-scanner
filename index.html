@@ -632,6 +632,18 @@ header     { padding-left: 20px; padding-right: 20px; }
   </div>
   <div class="h-right">
     <button class="demo-toggle" id="demo-btn" style="display:none">Demo On</button>
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(0,204,68,0.15);border:1px solid rgba(0,204,68,0.4);border-radius:6px;padding:7px 14px;">
+        <div style="width:12px;height:12px;border-radius:50%;background:#00cc44;box-shadow:0 0 8px #00cc44;flex-shrink:0;"></div>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:#00ff66;letter-spacing:2px;font-weight:700;">A TRADE</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(0,255,102,0.6);letter-spacing:1px;">ALL 5 FILTERS</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(255,140,0,0.15);border:1px solid rgba(255,140,0,0.4);border-radius:6px;padding:7px 14px;">
+        <div style="width:12px;height:12px;border-radius:50%;background:#ff8c00;box-shadow:0 0 8px #ff8c00;flex-shrink:0;"></div>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:#ff8c00;letter-spacing:2px;font-weight:700;">B TRADE</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,140,0,0.6);letter-spacing:1px;">4/5 FILTERS</span>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -1643,7 +1655,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v9_LIVE.html"
+  a.download = "Olivers_Scanner_v10_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
