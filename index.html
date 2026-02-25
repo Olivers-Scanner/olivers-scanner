@@ -1119,13 +1119,17 @@ function changeVis(secId, delta) {
 //  TIMEFRAME CONTROL
 // ══════════════════════════════════════════════════════════════
 function setTF(tf, label) {
+  // Reset demo tick timer so it updates immediately on TF change
+  lastDemoTick = 0
+
   // If scanning, restart with new interval
   if(scanningActive && scanInterval) {
     clearInterval(scanInterval)
     const tfMs = {
       '1':60000,'2':120000,'3':180000,'4':240000,'5':300000,
       '10':600000,'15':900000,'30':1800000,
-      '60':3600000,'240':14400000,'D':86400000,'W':86400000,'M':86400000
+      '60':3600000,'240':14400000,
+      'D':86400000,'W':604800000,'M':2592000000
     }
     scanInterval = setInterval(fetchLiveData, tfMs[tf] || 120000)
   }
@@ -1689,7 +1693,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v12_LIVE.html"
+  a.download = "Olivers_Scanner_v14_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -1725,7 +1729,8 @@ function toggleScanning() {
     const tfMs = {
       '1':60000, '2':120000, '3':180000, '4':240000, '5':300000,
       '10':600000, '15':900000, '30':1800000,
-      '60':3600000, '240':14400000, 'D':86400000, 'W':86400000, 'M':86400000
+      '60':3600000, '240':14400000,
+      'D':86400000, 'W':604800000, 'M':2592000000
     }
     const interval = tfMs[currentTF] || 120000
     scanInterval = setInterval(fetchLiveData, interval)
@@ -1733,12 +1738,24 @@ function toggleScanning() {
 }
 
 
+// Demo mode ticker — respects timeframe interval
+let lastDemoTick = 0
 setInterval(()=>{ 
   if(demoMode && !scanningActive){ 
-    const shortTF = ['1','2','3','4','5'].includes(currentTF)
-    if(shortTF) { tickPrices(); runScan(); renderAll() }
+    const tfMs = {
+      '1':60000,'2':120000,'3':180000,'4':240000,'5':300000,
+      '10':600000,'15':900000,'30':1800000,
+      '60':3600000,'240':14400000,
+      'D':86400000,'W':604800000,'M':2592000000
+    }
+    const interval = tfMs[currentTF] || 120000
+    const now = Date.now()
+    if(now - lastDemoTick >= interval) {
+      lastDemoTick = now
+      tickPrices(); runScan(); renderAll()
+    }
   } 
-}, 2500)
+}, 1000)
   startLiveData()
 setInterval(updateClock, 1000)
 updateClock()
