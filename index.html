@@ -1044,9 +1044,20 @@ function renderAll() {
     const sig = document.getElementById(`sig-${s.sym}`)
     if(sig){ sig.textContent=sigLabel; sig.className=`card-signal ${d.signal}` }
     const pr = document.getElementById(`price-${s.sym}`)
-    if(pr) pr.textContent = fmt(d.price,s.mkt)
+    if(pr) {
+      // Always read latest price from hist[] directly — not stale scanData
+      const livePrice = hist[s.sym] ? hist[s.sym][hist[s.sym].length-1] : d.price
+      pr.textContent = fmt(livePrice, s.mkt)
+    }
     const chg = document.getElementById(`chg-${s.sym}`)
-    if(chg){ chg.textContent=`${chgSign}${d.chgPct.toFixed(2)}%`; chg.className=`card-chg ${chgCls}` }
+    if(chg) {
+      const h = hist[s.sym]
+      const liveChg = h && h.length>20 ? ((h[h.length-1]-h[h.length-21])/h[h.length-21]*100) : d.chgPct
+      const liveChgSign = liveChg>=0?'+':''
+      const liveChgCls = liveChg>0?'up':liveChg<0?'down':'flat'
+      chg.textContent=`${liveChgSign}${liveChg.toFixed(2)}%`
+      chg.className=`card-chg ${liveChgCls}`
+    }
     const bar = document.getElementById(`bar-${s.sym}`)
     if(bar){
       if(d.f3&&d.barType!=='—'){ bar.innerHTML=`<span>${d.barIcon}</span>${d.barType}`; bar.style.display='inline-flex' }
@@ -1119,8 +1130,8 @@ function changeVis(secId, delta) {
 //  TIMEFRAME CONTROL
 // ══════════════════════════════════════════════════════════════
 function setTF(tf, label) {
-  // Reset demo tick timer so it updates immediately on TF change
-  lastDemoTick = 0
+  // Reset signal tick timer so it updates immediately on TF change
+  lastSignalTick = 0
 
   // If scanning, restart with new interval
   if(scanningActive && scanInterval) {
@@ -1693,7 +1704,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v14_LIVE.html"
+  a.download = "Olivers_Scanner_v15_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -1738,10 +1749,13 @@ function toggleScanning() {
 }
 
 
-// Demo mode ticker — respects timeframe interval
-let lastDemoTick = 0
+// PRICE ticker — always every 2.5 seconds (v9 style)
+let lastSignalTick = 0
 setInterval(()=>{ 
   if(demoMode && !scanningActive){ 
+    tickPrices()   // prices always update
+    
+    // Signals only update when timeframe bar closes
     const tfMs = {
       '1':60000,'2':120000,'3':180000,'4':240000,'5':300000,
       '10':600000,'15':900000,'30':1800000,
@@ -1750,12 +1764,14 @@ setInterval(()=>{
     }
     const interval = tfMs[currentTF] || 120000
     const now = Date.now()
-    if(now - lastDemoTick >= interval) {
-      lastDemoTick = now
-      tickPrices(); runScan(); renderAll()
+    if(now - lastSignalTick >= interval) {
+      lastSignalTick = now
+      runScan()  // only recalculate signals on bar close
     }
+    
+    renderAll()  // always render latest prices
   } 
-}, 1000)
+}, 2500)
   startLiveData()
 setInterval(updateClock, 1000)
 updateClock()
