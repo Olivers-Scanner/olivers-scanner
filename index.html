@@ -1090,6 +1090,16 @@ function changeVis(secId, delta) {
 //  TIMEFRAME CONTROL
 // ══════════════════════════════════════════════════════════════
 function setTF(tf, label) {
+  // If scanning, restart with new interval
+  if(scanningActive && scanInterval) {
+    clearInterval(scanInterval)
+    const tfMs = {
+      '1':60000,'2':120000,'3':180000,'4':240000,'5':300000,
+      '10':600000,'15':900000,'30':1800000,
+      '60':3600000,'240':14400000,'D':86400000,'W':86400000,'M':86400000
+    }
+    scanInterval = setInterval(fetchLiveData, tfMs[tf] || 120000)
+  }
   currentTF=tf; currentTFLabel=label
   document.querySelectorAll('.tf-btn').forEach(b=>{
     const map={'1M':'1','2M':'2','3M':'3','4M':'4','5M':'5','10M':'10','15M':'15','30M':'30','1H':'60','4H':'240','D':'D','W':'W','M':'M'}
@@ -1650,7 +1660,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v10_LIVE.html"
+  a.download = "Olivers_Scanner_v11_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -1682,12 +1692,24 @@ function toggleScanning() {
     document.getElementById('live-indicator').textContent = `◌ Fetching ${currentProvider}...`
     document.getElementById('live-indicator').style.color = '#ffe600'
     fetchLiveData()
-    scanInterval = setInterval(fetchLiveData, 120000)
+    // Set refresh interval based on current timeframe
+    const tfMs = {
+      '1':60000, '2':120000, '3':180000, '4':240000, '5':300000,
+      '10':600000, '15':900000, '30':1800000,
+      '60':3600000, '240':14400000, 'D':86400000, 'W':86400000, 'M':86400000
+    }
+    const interval = tfMs[currentTF] || 120000
+    scanInterval = setInterval(fetchLiveData, interval)
   }
 }
 
 
-setInterval(()=>{ if(demoMode && !scanningActive){ tickPrices(); runScan(); renderAll() } }, 2500)
+setInterval(()=>{ 
+  if(demoMode && !scanningActive){ 
+    const shortTF = ['1','2','3','4','5'].includes(currentTF)
+    if(shortTF) { tickPrices(); runScan(); renderAll() }
+  } 
+}, 2500)
   startLiveData()
 setInterval(updateClock, 1000)
 updateClock()
