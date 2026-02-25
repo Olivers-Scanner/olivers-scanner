@@ -922,14 +922,9 @@ function computeOV(s) {
   const count=[f1,f2,f3,f4,f5].filter(Boolean).length
   const allGo=f1&&f2&&f3&&f4&&f5
 
-  // B-TRADE: 4/5 filters — Color Game is the allowed missing filter
-  // Color Game is part of f3 — specifically the colorLong/colorShort component
-  // A B-trade fires when f1,f2,f4,f5 pass AND bar is Elephant Bar or Tail (not Color Game)
-  const isColorGameOnly = (colorLong||colorShort) && !isEleph && !isBotTail && !isTopTail
-  const f3_noColorGame = (isEleph||isBotTail||isTopTail) // strong bar without color game
-  const bTradeGo = f1&&f2&&f3_noColorGame&&f4&&f5 // 4/5 — has strong bar but may lack color game
-  const bTradeLong = bTradeGo && f2long && !allGo
-  const bTradeShort = bTradeGo && f2short && !allGo
+  // B-TRADE: exactly 4/5 filters passing (any one missing)
+  const bTradeLong = count===4 && f2long && !allGo
+  const bTradeShort = count===4 && f2short && !allGo
 
   let signal='none'
   if(allGo&&f2long) signal='buy'
