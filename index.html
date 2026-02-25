@@ -602,6 +602,20 @@ header     { padding-left: 20px; padding-right: 20px; }
   .f-pip.buy-on { background:#00cc44; }
   .f-pip.sell-on { background:#ff3344; }
 
+
+  /* Trade direction arrows */
+  .trade-arrow {
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 900;
+    margin: 4px 0 2px 0;
+    letter-spacing: 0;
+  }
+  .trade-arrow.buy-arrow  { color: #00ff66; text-shadow: 0 0 20px rgba(0,255,102,0.8); }
+  .trade-arrow.sell-arrow { color: #ff3344; text-shadow: 0 0 20px rgba(255,51,68,0.8); }
+  .trade-arrow.btrade-buy-arrow  { color: #ff8c00; text-shadow: 0 0 20px rgba(255,140,0,0.8); }
+  .trade-arrow.btrade-sell-arrow { color: #ff3344; text-shadow: 0 0 20px rgba(255,51,68,0.8); }
+
 </style>
 </head>
 <body>
@@ -989,6 +1003,7 @@ function buildGrid() {
           <span class="card-chg flat" id="chg-${s.sym}">—</span>
         </div>
         <div class="bar-type" id="bar-${s.sym}" style="display:none;"></div>
+        <div class="trade-arrow" id="arrow-${s.sym}" style="display:none;"></div>
         <div class="filters">
           ${[0,1,2,3,4].map(j=>`<div class="f-pip off" id="pip-${s.sym}-${j}"></div>`).join('')}
           <span class="f-score" id="score-${s.sym}">0/5</span>
@@ -1036,6 +1051,20 @@ function renderAll() {
     if(bar){
       if(d.f3&&d.barType!=='—'){ bar.innerHTML=`<span>${d.barIcon}</span>${d.barType}`; bar.style.display='inline-flex' }
       else bar.style.display='none'
+    }
+    const arrow = document.getElementById(`arrow-${s.sym}`)
+    if(arrow){
+      if(d.signal==='buy'){
+        arrow.textContent='▲'; arrow.className='trade-arrow buy-arrow'; arrow.style.display='block'
+      } else if(d.signal==='sell'){
+        arrow.textContent='▼'; arrow.className='trade-arrow sell-arrow'; arrow.style.display='block'
+      } else if(d.signal==='btrade-buy'){
+        arrow.textContent='▲'; arrow.className='trade-arrow btrade-buy-arrow'; arrow.style.display='block'
+      } else if(d.signal==='btrade-sell'){
+        arrow.textContent='▼'; arrow.className='trade-arrow btrade-sell-arrow'; arrow.style.display='block'
+      } else {
+        arrow.style.display='none'
+      }
     }
     ;[d.f1,d.f2,d.f3,d.f4,d.f5].forEach((f,i)=>{
       const pip=document.getElementById(`pip-${s.sym}-${i}`)
@@ -1660,7 +1689,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v11_LIVE.html"
+  a.download = "Olivers_Scanner_v12_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
