@@ -1,27 +1,27 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 22                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 23                    ║ -->
 <!-- ║  Built: 2026-03-10                                          ║ -->
-<!-- ║  Changes from v21:                                          ║ -->
-<!-- ║   • v22 clean stamp — all version refs updated              ║ -->
-<!-- ║   • Version badge visible in header (v22 in gold)           ║ -->
-<!-- ║   • Page title updated: Oliver's Scanner v22                ║ -->
-<!-- ║   • Download saves as Olivers_Scanner_v22_LIVE.html         ║ -->
+<!-- ║  Changes from v22:                                          ║ -->
+<!-- ║   • FIXED: Yahoo no longer auto-starts on load              ║ -->
+<!-- ║   • FIXED: Default fallback in switch → FMP not Yahoo       ║ -->
+<!-- ║   • FIXED: startLiveData() uses saved provider not Yahoo    ║ -->
+<!-- ║   • Yahoo still available as manual choice in settings      ║ -->
 <!-- ║  Security (carried from v21):                               ║ -->
 <!-- ║   • AES-256-GCM encrypted key storage                       ║ -->
 <!-- ║   • Masked key display (••••••••[last4])                    ║ -->
 <!-- ║   • Fields auto-cleared on panel close                      ║ -->
 <!-- ║  Data (carried from v20):                                   ║ -->
 <!-- ║   • FMP as default/recommended provider ($19/mo)            ║ -->
-<!-- ║   • 6 API providers: FMP·Finage·TwelveData·                 ║ -->
+<!-- ║   • 7 API providers: FMP·Finage·TwelveData·                 ║ -->
 <!-- ║     Finnhub·Polygon·Alpaca·Yahoo                            ║ -->
 <!-- ╚══════════════════════════════════════════════════════════════╝ -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v22</title>
+<title>Oliver's Scanner v23</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -658,7 +658,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v22</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v23</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1334,7 +1334,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v22'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v23'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1826,7 +1826,8 @@ async function fetchSymbolLive(sym) {
     case 'twelvedata': return await fetchTwelveData(sym)
     case 'finnhub':    return await fetchFinnhub(sym)
     case 'polygon':    return await fetchPolygon(sym)
-    default:           return await fetchYahoo(sym)
+    case 'yahoo':      return await fetchYahoo(sym)
+    default:           return await fetchFMP(sym)   // FMP is default, never fall to Yahoo
   }
 }
 
@@ -1941,14 +1942,13 @@ async function fetchLiveData() {
 
 
 async function startLiveData() {
-  // Auto-start with Yahoo Finance — no key needed
   if (!scanningActive) {
-    currentProvider = localStorage.getItem('ov_provider') || 'yahoo'
+    currentProvider = localStorage.getItem('ov_provider') || 'fmp'
     scanningActive = true
     demoMode = false
     const btn = document.getElementById('startStopBtn')
     if(btn){ btn.textContent = '■ STOP SCAN'; btn.style.background='#ff4444'; btn.style.color='#fff' }
-    document.getElementById('live-indicator').textContent = '◌ Connecting to Yahoo Finance...'
+    document.getElementById('live-indicator').textContent = `◌ Connecting to ${currentProvider.toUpperCase()}...`
     document.getElementById('live-indicator').style.color = '#ffe600'
     fetchLiveData()
     const tfMs = {
@@ -1966,7 +1966,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v22_LIVE.html"
+  a.download = "Olivers_Scanner_v23_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
