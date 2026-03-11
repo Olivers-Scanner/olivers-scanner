@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 48                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 49                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v48</title>
+<title>Oliver's Scanner v49</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v48</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v49</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -2092,13 +2092,14 @@ async function fetchLiveQuotes() {
     const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${fmpSyms}&apikey=${apiKey}`
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-      if (!res.ok) continue
+      if (!res.ok) { console.warn('Quote HTTP', res.status, fmpSyms); continue }
       const quotes = await res.json()
-      if (!Array.isArray(quotes)) continue
+      if (!Array.isArray(quotes)) { console.warn('Quote not array:', JSON.stringify(quotes).slice(0,100)); continue }
+      console.log('Quote raw sample:', quotes[0])
       quotes.forEach(q => {
         if (!q || !q.symbol) return
         const price = q.price || q.previousClose || q.open
-        if (!price) return
+        if (!price) { console.warn('No price for:', q.symbol, Object.keys(q)); return }
         batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
              .forEach(m => { liveQuote[m.sym] = parseFloat(price) })
       })
@@ -2195,7 +2196,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v48_LIVE.html"
+  a.download = "Olivers_Scanner_v49_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
