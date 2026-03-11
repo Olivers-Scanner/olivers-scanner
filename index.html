@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 51                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 54                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v51</title>
+<title>Oliver's Scanner v54</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v51</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v54</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1509,7 +1509,7 @@ function _maskKey(k) {
 }
 
 // ── Runtime key vars (in-memory only, never logged) ──────────
-let currentProvider = localStorage.getItem('ov_provider') || 'polygon'
+let currentProvider = localStorage.getItem('ov_provider') || 'yahoo'
 let apiKey    = ''
 let apiSecret = ''
 
@@ -1947,6 +1947,104 @@ const TRAD_MAP = {
 // ── FINNHUB ──────────────────────────────────────────────────
 // Uses /quote endpoint (always free, real-time) 
 // Builds synthetic bars from quote data
+
+// ══════════════════════════════════════════════════════════════
+//  FINNHUB WEBSOCKET — live tick prices
+//  Free tier: US stocks + crypto (via Binance/Coinbase)
+//  Direct browser connection — no CORS issues
+//  Docs: finnhub.io/docs/en/websocket/trade
+// ══════════════════════════════════════════════════════════════
+let finnhubWS = null
+let finnhubReconnectTimer = null
+let finnhubKey = null  // set when API key is loaded
+
+// Finnhub WS symbol map — only symbols supported on free tier
+const FINNHUB_WS_MAP = {
+  // US Stocks — direct
+  'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
+  'META':'META','GOOGL':'GOOGL','AMD':'AMD','NFLX':'NFLX','GS':'GS',
+  // Crypto — via Binance feed
+  'BTCUSD':'BINANCE:BTCUSDT','ETHUSD':'BINANCE:ETHUSDT','SOLUSD':'BINANCE:SOLUSDT',
+  'BNBUSD':'BINANCE:BNBUSDT','XRPUSD':'BINANCE:XRPUSDT','ADAUSD':'BINANCE:ADAUSDT',
+  'AVAXUSD':'BINANCE:AVAXUSDT','DOTUSD':'BINANCE:DOTUSDT',
+  'MATICUSD':'BINANCE:MATICUSDT','LINKUSD':'BINANCE:LINKUSDT',
+  // Forex — via OANDA (free tier, real-time)
+  'EURUSD':'OANDA:EUR_USD','GBPUSD':'OANDA:GBP_USD','USDJPY':'OANDA:USD_JPY',
+  'AUDUSD':'OANDA:AUD_USD','USDCAD':'OANDA:USD_CAD','EURGBP':'OANDA:EUR_GBP',
+  'USDMXN':'OANDA:USD_MXN','GBPJPY':'OANDA:GBP_JPY',
+  'XAUUSD':'OANDA:XAU_USD','XAGUSD':'OANDA:XAG_USD',
+  // Indices — ETF proxies (Finnhub doesn't stream index ticks directly)
+  'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM','VIX':'VIXY',
+  'DAX':'EWG','FTSE':'EWU','HSI':'EWH','NKY':'EWJ','CAC':'EWQ',
+  // Futures — ETF proxies
+  'NQ1!':'QQQ','ES1!':'SPY','CL1!':'USO','GC1!':'GLD','SI1!':'SLV',
+  'YM1!':'DIA','ZB1!':'TLT','NG1!':'UNG','ZC1!':'CORN','HG1!':'COPX'
+}
+
+// Reverse map: Finnhub WS symbol → our sym
+const FINNHUB_WS_REVERSE = {}
+function buildFinnhubWSReverse() {
+  Object.entries(FINNHUB_WS_MAP).forEach(([ourSym, wsSym]) => {
+    if (!FINNHUB_WS_REVERSE[wsSym]) FINNHUB_WS_REVERSE[wsSym] = ourSym
+  })
+}
+
+function connectFinnhubWS(key) {
+  if (!key) return
+  finnhubKey = key
+  buildFinnhubWSReverse()
+  disconnectFinnhubWS()
+
+  try {
+    finnhubWS = new WebSocket(`wss://ws.finnhub.io?token=${key}`)
+
+    finnhubWS.onopen = () => {
+      console.log('Finnhub WS connected ✓')
+      // Subscribe to all mapped symbols
+      const subbed = new Set()
+      SECTIONS.forEach(sec => sec.syms.forEach(s => {
+        const wsSym = FINNHUB_WS_MAP[s.sym]
+        if (wsSym && !subbed.has(wsSym)) {
+          finnhubWS.send(JSON.stringify({ type: 'subscribe', symbol: wsSym }))
+          subbed.add(wsSym)
+        }
+      }))
+      console.log(`Finnhub WS: subscribed to ${subbed.size} symbols`)
+    }
+
+    finnhubWS.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+        if (msg.type !== 'trade' || !msg.data) return
+        msg.data.forEach(trade => {
+          const ourSym = FINNHUB_WS_REVERSE[trade.s]
+          if (ourSym && trade.p) {
+            liveQuote[ourSym] = trade.p
+          }
+        })
+        renderAll()
+      } catch(err) {}
+    }
+
+    finnhubWS.onerror = (e) => console.warn('Finnhub WS error:', e.message || 'connection error')
+
+    finnhubWS.onclose = () => {
+      console.log('Finnhub WS closed')
+      if (scanningActive && currentProvider === 'finnhub') {
+        console.log('Reconnecting in 5s...')
+        finnhubReconnectTimer = setTimeout(() => connectFinnhubWS(finnhubKey), 5000)
+      }
+    }
+  } catch(e) {
+    console.warn('Finnhub WS failed to open:', e.message)
+  }
+}
+
+function disconnectFinnhubWS() {
+  if (finnhubReconnectTimer) { clearTimeout(finnhubReconnectTimer); finnhubReconnectTimer = null }
+  if (finnhubWS) { try { finnhubWS.close() } catch(e){} ; finnhubWS = null }
+}
+
 const FINNHUB_MAP = {
   'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM',
   'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
@@ -2314,14 +2412,15 @@ async function fetchLiveData() {
   runScan()
   liveCheckAlerts()
   renderAll()
-  // Start live WebSocket ticks if using Polygon
-  if (currentProvider === 'polygon') connectMassiveWS()
+  // Start live WebSocket ticks
+  if (currentProvider === 'finnhub') connectFinnhubWS(apiKey)
+  else if (currentProvider === 'polygon') connectMassiveWS()
 }
 
 
 async function startLiveData() {
   if (!scanningActive) {
-    currentProvider = localStorage.getItem('ov_provider') || 'polygon'
+    currentProvider = localStorage.getItem('ov_provider') || 'yahoo'
     scanningActive = true
     demoMode = false
     liveAlertPass = 0
@@ -2355,7 +2454,6 @@ function downloadScanner() {
 
 // ── START / STOP ENGINE ──────────────────────────────────────
 let scanningActive = false
-    disconnectMassiveWS()
 let scanInterval = null
 
 function toggleScanning() {
@@ -2431,9 +2529,9 @@ updateClock()
   <div class="api-title">⚡ Data Source Settings</div>
 
   <div class="api-provider active" id="prov-yahoo" onclick="selectProvider('yahoo')">
-    <div class="provider-dot" style="background:#888"></div>
+    <div class="provider-dot" style="background:#00ff88"></div>
     <div>
-      <div class="api-provider-name">Yahoo Finance</div>
+      <div class="api-provider-name">Yahoo Finance ⭐ DEFAULT</div>
       <div class="api-provider-tier">FREE · No key · ⚠ 15min delay on stocks · Real-time crypto/forex only</div>
     </div>
     <div class="api-provider-price">$0/mo</div>
@@ -2443,7 +2541,7 @@ updateClock()
     <div class="provider-dot" style="background:#00b4ff"></div>
     <div>
       <div class="api-provider-name">FMP</div>
-      <div class="api-provider-tier">$69/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · Bar closes only, no live ticks</div>
+      <div class="api-provider-tier">$69/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · 1min bars · Most reliable</div>
     </div>
     <div class="api-provider-price">financialmodelingprep.com</div>
   </div>
@@ -2470,7 +2568,7 @@ updateClock()
     <div class="provider-dot" style="background:#00ff88"></div>
     <div>
       <div class="api-provider-name">Finnhub ⭐ FREE REAL-TIME</div>
-      <div class="api-provider-tier">FREE · Stocks ✓ Forex ✓ Crypto ✓ · TRUE real-time · No delay · 60 calls/min · Browser friendly</div>
+      <div class="api-provider-tier">FREE · Stocks ✓ Forex ✓ Crypto ✓ · Live WebSocket ticks · FMP bars for signals</div>
     </div>
     <div class="api-provider-price">finnhub.io</div>
   </div>
@@ -2478,8 +2576,8 @@ updateClock()
   <div class="api-provider" id="prov-polygon" onclick="selectProvider('polygon')">
     <div class="provider-dot" style="background:#ffe600"></div>
     <div>
-      <div class="api-provider-name">Massive (Polygon.io) ⭐ ACTIVE</div>
-      <div class="api-provider-tier">$29/mo · Stocks ✓ Crypto ✓ Indices ✓ · Live WebSocket ticks + 1min bars</div>
+      <div class="api-provider-name">Massive (Polygon.io)</div>
+      <div class="api-provider-tier">$199/mo for real-time · Stocks ✓ Crypto ✓ Indices ✓ · WebSocket ticks</div>
     </div>
     <div class="api-provider-price">massive.com</div>
   </div>
