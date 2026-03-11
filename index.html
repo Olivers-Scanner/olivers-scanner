@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 49                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 51                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v49</title>
+<title>Oliver's Scanner v51</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v49</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v51</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1509,7 +1509,7 @@ function _maskKey(k) {
 }
 
 // ── Runtime key vars (in-memory only, never logged) ──────────
-let currentProvider = localStorage.getItem('ov_provider') || 'fmp'
+let currentProvider = localStorage.getItem('ov_provider') || 'polygon'
 let apiKey    = ''
 let apiSecret = ''
 
@@ -1633,24 +1633,187 @@ async function fetchYahoo(sym) {
   } catch(e) { return null }
 }
 
-async function fetchPolygon(sym) {
-  const polySym = POLY_MAP[sym] || sym
-  const now = new Date()
-  const from = new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]
-  const to   = now.toISOString().split('T')[0]
-  const mult = ['D','W','M'].includes(currentTF) ? 1 : (parseInt(currentTF)||2)
-  const unit = ['D','W','M'].includes(currentTF) ? (currentTF==='D'?'day':currentTF==='W'?'week':'month') : 'minute'
-  const proxyUrl = `https://oliver-proxy.vercel.app/api/polygon?symbol=${encodeURIComponent(polySym)}&multiplier=${mult}&timespan=${unit}&from=${from}&to=${to}&apikey=${apiKey}`
+
+// ══════════════════════════════════════════════════════════════
+//  MASSIVE/POLYGON WEBSOCKET — live tick prices
+//  Stocks: wss://socket.massive.com/stocks  (A.* second aggs)
+//  Crypto: wss://socket.massive.com/crypto  (XA.* second aggs)
+// ══════════════════════════════════════════════════════════════
+let massiveWS_stocks = null
+let massiveWS_crypto = null
+let massiveWS_reconnectTimer = null
+
+// Build WebSocket subscription lists from current symbols
+function getMassiveSubscriptions() {
+  const stocksSubs = []  // for stocks WS
+  const cryptoSubs = []  // for crypto WS
+
+  SECTIONS.forEach(sec => sec.syms.forEach(s => {
+    const mapped = POLY_MAP[s.sym] || s.sym
+    if (mapped.startsWith('X:')) {
+      // Crypto: X:BTCUSD → XA.BTC-USD
+      const pair = mapped.replace('X:', '').replace('USD', '-USD')
+      cryptoSubs.push(`XA.${pair}`)
+    } else if (!mapped.startsWith('C:') && !mapped.startsWith('I:')) {
+      // Stocks and ETFs: AAPL → A.AAPL
+      stocksSubs.push(`A.${mapped}`)
+    } else if (mapped.startsWith('I:')) {
+      // Indices: I:SPX → A.SPX
+      stocksSubs.push(`A.${mapped.replace('I:','')}`)
+    }
+    // Forex (C:) skipped — delayed on Starter
+  }))
+
+  return { stocksSubs, cryptoSubs }
+}
+
+function handleMassiveMessage(data, type) {
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
+    const msgs = JSON.parse(data)
+    msgs.forEach(msg => {
+      if (msg.ev === 'status') {
+        console.log(`Massive WS [${type}]:`, msg.message)
+        return
+      }
+      // Second aggregate event
+      if (msg.ev === 'A' && msg.sym && msg.c) {
+        // Map back: stock sym → our sym
+        const sym = getMassiveRevSym(msg.sym, 'stock')
+        if (sym) { liveQuote[sym] = msg.c }
+      }
+      if (msg.ev === 'XA' && msg.pair && msg.c) {
+        // Map back: BTC-USD → BTCUSD
+        const sym = msg.pair.replace('-', '')
+        if (liveQuote[sym] !== undefined || POLY_MAP[sym]) {
+          liveQuote[sym] = msg.c
+        }
+      }
+    })
+    renderAll()
+  } catch(e) {}
+}
+
+// Reverse POLY_MAP: mapped sym → our sym
+const POLY_REVERSE = {}
+function buildPolyReverse() {
+  Object.entries(POLY_MAP).forEach(([ourSym, mapped]) => {
+    // For stocks/ETFs, key = mapped (e.g. 'AAPL' → 'AAPL', 'QQQ' → 'NQ1!')
+    // For indices, key = without I: prefix (e.g. 'SPX' → 'SPX')
+    const key = mapped.replace('I:','').replace('X:','').replace('C:','')
+    if (!POLY_REVERSE[key]) POLY_REVERSE[key] = ourSym
+  })
+}
+
+function getMassiveRevSym(wsSym, type) {
+  return POLY_REVERSE[wsSym] || null
+}
+
+function connectMassiveWS() {
+  if (currentProvider !== 'polygon') return
+  if (!apiKey) return
+
+  buildPolyReverse()
+  disconnectMassiveWS()
+
+  const { stocksSubs, cryptoSubs } = getMassiveSubscriptions()
+
+  // ── Stocks WebSocket ──
+  if (stocksSubs.length > 0) {
+    try {
+      massiveWS_stocks = new WebSocket('wss://socket.massive.com/stocks')
+      massiveWS_stocks.onopen = () => {
+        massiveWS_stocks.send(JSON.stringify({ action: 'auth', params: apiKey }))
+        // Subscribe in batches to avoid message size limits
+        const BATCH = 50
+        for (let i = 0; i < stocksSubs.length; i += BATCH) {
+          const batch = stocksSubs.slice(i, i + BATCH).join(',')
+          massiveWS_stocks.send(JSON.stringify({ action: 'subscribe', params: batch }))
+        }
+        console.log(`Massive WS stocks: subscribed to ${stocksSubs.length} channels`)
+      }
+      massiveWS_stocks.onmessage = (e) => handleMassiveMessage(e.data, 'stocks')
+      massiveWS_stocks.onerror = (e) => console.warn('Massive WS stocks error:', e.message || e)
+      massiveWS_stocks.onclose = (e) => {
+        console.log('Massive WS stocks closed, reconnecting in 5s...')
+        if (scanningActive && currentProvider === 'polygon') {
+          massiveWS_reconnectTimer = setTimeout(connectMassiveWS, 5000)
+        }
+      }
+    } catch(e) { console.warn('Failed to open stocks WS:', e.message) }
+  }
+
+  // ── Crypto WebSocket ──
+  if (cryptoSubs.length > 0) {
+    try {
+      massiveWS_crypto = new WebSocket('wss://socket.massive.com/crypto')
+      massiveWS_crypto.onopen = () => {
+        massiveWS_crypto.send(JSON.stringify({ action: 'auth', params: apiKey }))
+        const subs = cryptoSubs.join(',')
+        massiveWS_crypto.send(JSON.stringify({ action: 'subscribe', params: subs }))
+        console.log(`Massive WS crypto: subscribed to ${cryptoSubs.length} channels`)
+      }
+      massiveWS_crypto.onmessage = (e) => handleMassiveMessage(e.data, 'crypto')
+      massiveWS_crypto.onerror = (e) => console.warn('Massive WS crypto error:', e.message || e)
+      massiveWS_crypto.onclose = () => {} // handled by stocks WS reconnect
+    } catch(e) { console.warn('Failed to open crypto WS:', e.message) }
+  }
+}
+
+function disconnectMassiveWS() {
+  if (massiveWS_reconnectTimer) { clearTimeout(massiveWS_reconnectTimer); massiveWS_reconnectTimer = null }
+  if (massiveWS_stocks) { try { massiveWS_stocks.close() } catch(e){} ; massiveWS_stocks = null }
+  if (massiveWS_crypto) { try { massiveWS_crypto.close() } catch(e){} ; massiveWS_crypto = null }
+}
+
+async function fetchPolygon(sym) {
+  if (!apiKey) { console.warn('Polygon: no API key'); return null }
+  const polySym = POLY_MAP[sym] || sym
+
+  // Always fetch 1min bars — we aggregate to target TF ourselves
+  const now  = new Date()
+  const to   = now.toISOString().split('T')[0]
+  // 24/7 assets need less lookback; stocks need 5 trading days for MA200
+  const isCrypto = polySym.startsWith('X:')
+  const daysBack = isCrypto ? 2 : 7
+  const from = new Date(now - daysBack*24*60*60*1000).toISOString().split('T')[0]
+
+  const proxyUrl = `https://oliver-proxy.vercel.app/api/polygon?symbol=${encodeURIComponent(polySym)}&multiplier=1&timespan=minute&from=${from}&to=${to}&apikey=${apiKey}`
+
+  try {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) })
     if (!res.ok) { console.warn('Polygon proxy HTTP', res.status, polySym); return null }
     const data = await res.json()
+    if (data.error) { console.warn('Polygon error:', polySym, data.error); return null }
     if (!data.results || data.results.length === 0) {
       console.warn('Polygon empty:', polySym, data.status)
       return null
     }
-    console.log(`Polygon ✓ ${polySym}: ${data.results.length} bars`)
-    return data.results.map(b => ({ c:b.c, o:b.o, h:b.h, l:b.l }))
+
+    // Aggregate 1min → target TF
+    const tfNum = parseInt(currentTF) || 2
+    let bars1min = data.results // already sorted asc from proxy
+    let result
+    if (tfNum > 1) {
+      const agg = []
+      for (let i = 0; i <= bars1min.length - tfNum; i += tfNum) {
+        const chunk = bars1min.slice(i, i + tfNum)
+        agg.push({
+          o: chunk[0].o,
+          h: Math.max(...chunk.map(b => b.h)),
+          l: Math.min(...chunk.map(b => b.l)),
+          c: chunk[chunk.length-1].c,
+          v: chunk.reduce((s,b) => s + (b.v||0), 0)
+        })
+      }
+      result = agg
+    } else {
+      result = bars1min.map(b => ({ o:b.o, h:b.h, l:b.l, c:b.c, v:b.v||0 }))
+    }
+
+    const clean = result.filter(b => b.c != null && b.c > 0)
+    console.log(`Polygon ✓ ${polySym}: ${clean.length} bars @ ${currentTF}min`)
+    return clean.length >= 5 ? clean : null
+
   } catch(e) {
     console.warn('Polygon error:', polySym, e.message)
     return null
@@ -2081,43 +2244,30 @@ async function fetchBatch(syms) {
 // ══════════════════════════════════════════════════════════════
 let quoteInterval = null
 
-async function fetchLiveQuotes() {
-  if (!scanningActive || !apiKey) return
+function fetchLiveQuotes() {
+  // Read latest close from histFull (already fetched 1min bars)
+  // This gives us fresh prices without any extra API calls
   const allSyms = []
   SECTIONS.forEach(sec => sec.syms.forEach(s => allSyms.push(s)))
-  const BATCH = 20
-  for (let i = 0; i < allSyms.length; i += BATCH) {
-    const batch = allSyms.slice(i, i + BATCH)
-    const fmpSyms = batch.map(s => FMP_SYM[s.sym] || s.sym).join(',')
-    const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${fmpSyms}&apikey=${apiKey}`
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-      if (!res.ok) { console.warn('Quote HTTP', res.status, fmpSyms); continue }
-      const quotes = await res.json()
-      if (!Array.isArray(quotes)) { console.warn('Quote not array:', JSON.stringify(quotes).slice(0,100)); continue }
-      console.log('Quote raw sample:', quotes[0])
-      quotes.forEach(q => {
-        if (!q || !q.symbol) return
-        const price = q.price || q.previousClose || q.open
-        if (!price) { console.warn('No price for:', q.symbol, Object.keys(q)); return }
-        batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
-             .forEach(m => { liveQuote[m.sym] = parseFloat(price) })
-      })
-    } catch(e) { console.warn('Quote batch error:', e.message) }
+  let updated = 0
+  allSyms.forEach(s => {
+    const hf = histFull[s.sym]
+    if (!hf || hf.length === 0) return
+    const latest = hf[hf.length - 1]
+    if (latest && latest.c) {
+      liveQuote[s.sym] = latest.c
+      updated++
+    }
+  })
+  if (updated > 0) {
+    console.log(`Quote tick ✓ ${updated} prices from histFull`)
+    renderAll()
   }
-  const updated = Object.keys(liveQuote).length
-  if (updated > 0) console.log(`Quote tick ✓ ${updated} prices`)
-  renderAll()
 }
 
 function startQuoteTicker() {
   stopQuoteTicker()
-  // Wait for apiKey to be available before first fetch
-  setTimeout(() => {
-    if (!apiKey) { console.warn('Quote ticker: no API key, retrying...'); startQuoteTicker(); return }
-    fetchLiveQuotes()
-    quoteInterval = setInterval(fetchLiveQuotes, 7000)
-  }, 2000)
+  quoteInterval = setInterval(fetchLiveQuotes, 7000)
 }
 
 function stopQuoteTicker() {
@@ -2164,12 +2314,14 @@ async function fetchLiveData() {
   runScan()
   liveCheckAlerts()
   renderAll()
+  // Start live WebSocket ticks if using Polygon
+  if (currentProvider === 'polygon') connectMassiveWS()
 }
 
 
 async function startLiveData() {
   if (!scanningActive) {
-    currentProvider = localStorage.getItem('ov_provider') || 'fmp'
+    currentProvider = localStorage.getItem('ov_provider') || 'polygon'
     scanningActive = true
     demoMode = false
     liveAlertPass = 0
@@ -2196,13 +2348,14 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v49_LIVE.html"
+  a.download = "Olivers_Scanner_v50_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
 
 // ── START / STOP ENGINE ──────────────────────────────────────
 let scanningActive = false
+    disconnectMassiveWS()
 let scanInterval = null
 
 function toggleScanning() {
@@ -2289,8 +2442,8 @@ updateClock()
   <div class="api-provider" id="prov-fmp" onclick="selectProvider('fmp')">
     <div class="provider-dot" style="background:#00b4ff"></div>
     <div>
-      <div class="api-provider-name">FMP ⭐ RECOMMENDED</div>
-      <div class="api-provider-tier">$19/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · Near real-time intraday</div>
+      <div class="api-provider-name">FMP</div>
+      <div class="api-provider-tier">$69/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · Bar closes only, no live ticks</div>
     </div>
     <div class="api-provider-price">financialmodelingprep.com</div>
   </div>
@@ -2325,10 +2478,10 @@ updateClock()
   <div class="api-provider" id="prov-polygon" onclick="selectProvider('polygon')">
     <div class="provider-dot" style="background:#ffe600"></div>
     <div>
-      <div class="api-provider-name">Polygon.io ⭐ RECOMMENDED</div>
-      <div class="api-provider-tier">$29/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · 1min bars · Via Vercel proxy</div>
+      <div class="api-provider-name">Massive (Polygon.io) ⭐ ACTIVE</div>
+      <div class="api-provider-tier">$29/mo · Stocks ✓ Crypto ✓ Indices ✓ · Live WebSocket ticks + 1min bars</div>
     </div>
-    <div class="api-provider-price">$29/mo</div>
+    <div class="api-provider-price">massive.com</div>
   </div>
 
   <div class="api-key-row" id="keyRow" style="display:none">
