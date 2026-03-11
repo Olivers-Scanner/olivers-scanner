@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 41                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 42                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v41</title>
+<title>Oliver's Scanner v42</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v41</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v42</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -892,12 +892,14 @@ const scanData = {}
 function computeOV(s) {
   const hf = histFull[s.sym]   // real OHLCV bars [{o,h,l,c,v}]
   const h  = hist[s.sym]       // close prices for MA calcs
-  if (!hf || hf.length < 22 || !h || h.length < 22) return null
+  if (!h || h.length < 5) return null
+  // If histFull missing, show price only with limited signals
+  const hfAvail = hf && hf.length >= 22
 
   const n = h.length
 
   // ── Real OHLC from latest bar ────────────────────────────────
-  const bar   = hf[hf.length - 1]
+  const bar   = hfAvail ? hf[hf.length - 1] : { c:h[h.length-1], o:h[h.length-2]||h[h.length-1], h:h[h.length-1], l:h[h.length-1] }
   const close = bar.c, open = bar.o, high = bar.h, low = bar.l
 
   // ── MAs on close history ─────────────────────────────────────
@@ -919,8 +921,10 @@ function computeOV(s) {
   const range = high - low || 0.0001
 
   // Average body of last 10 real bars (not random)
-  const recentBars = hf.slice(Math.max(0, hf.length - 11), hf.length - 1)
-  const avgBody = recentBars.reduce((a,b) => a + Math.abs(b.c - b.o), 0) / (recentBars.length || 1) || 0.0001
+  const recentBars = hfAvail ? hf.slice(Math.max(0, hf.length - 11), hf.length - 1) : []
+  const avgBody = recentBars.length > 0
+    ? recentBars.reduce((a,b) => a + Math.abs(b.c - b.o), 0) / recentBars.length
+    : Math.abs(close - open) * 0.5 || 0.0001
 
   const isGreen = close >= open
   const isEleph = body >= 1.5 * avgBody
@@ -931,7 +935,7 @@ function computeOV(s) {
   const isTopTail = uWick / range >= 0.55
 
   // Color Game: reversal bar + MA confirmation
-  const prevBar   = hf[hf.length - 2]
+  const prevBar   = hfAvail ? hf[hf.length - 2] : null
   const prevGreen = prevBar ? prevBar.c >= prevBar.o : false
   const colorLong  = isGreen  && !prevGreen && close > ma20
   const colorShort = !isGreen && prevGreen  && close < ma20
@@ -1726,22 +1730,24 @@ async function fetchFinnhub(sym) {
 
 // Symbol mapping for FMP
 const FMP_SYM = {
-  // Stocks — pass through as-is
+  // Stocks
   'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT',
   'AMZN':'AMZN','META':'META','GOOGL':'GOOGL','AMD':'AMD',
-  'SPY':'SPY','QQQ':'QQQ','IWM':'IWM',
-  // Indices (URL-encoded ^ prefix)
-  'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM',
-  // Forex — direct pairs
+  'NFLX':'NFLX','GS':'GS',
+  // Indices — ETF proxies (FMP doesn't support ^ symbols)
+  'SPX':'SPY','NDX':'QQQ','DJI':'DIA','RUT':'IWM','VIX':'VIXY',
+  'DAX':'EWG','FTSE':'EWU','HSI':'EWH','NKY':'EWJ','CAC':'EWQ',
+  // Forex
   'EURUSD':'EURUSD','GBPUSD':'GBPUSD','USDJPY':'USDJPY',
   'AUDUSD':'AUDUSD','USDCAD':'USDCAD','USDCHF':'USDCHF',
-  // Metals (commodity format)
+  'USDMXN':'USDMXN','EURGBP':'EURGBP','GBPJPY':'GBPJPY',
+  // Metals
   'XAUUSD':'GCUSD','XAGUSD':'SIUSD',
   // Crypto
   'BTCUSD':'BTCUSD','ETHUSD':'ETHUSD','SOLUSD':'SOLUSD',
   'BNBUSD':'BNBUSD','XRPUSD':'XRPUSD','ADAUSD':'ADAUSD',
   'AVAXUSD':'AVAXUSD','DOTUSD':'DOTUSD','MATICUSD':'MATICUSD','LINKUSD':'LINKUSD',
-  // Futures → closest FMP equivalent
+  // Futures — ETF proxies
   'NQ1!':'QQQ','ES1!':'SPY','CL1!':'USO','GC1!':'GCUSD',
   'SI1!':'SIUSD','YM1!':'DIA','ZB1!':'TLT','NG1!':'UNG',
   'ZC1!':'CORN','HG1!':'COPX'
@@ -2089,7 +2095,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v41_LIVE.html"
+  a.download = "Olivers_Scanner_v42_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
