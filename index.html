@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 31                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 32                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v31</title>
+<title>Oliver's Scanner v32</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v31</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v32</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1332,7 +1332,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v31'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v32'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1509,18 +1509,23 @@ async function fetchPolygon(sym) {
   const now = new Date()
   const from = new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]
   const to   = now.toISOString().split('T')[0]
-  const tfMap = {'1':'1','2':'2','3':'3','5':'5','10':'10','15':'15','30':'30','60':'60','240':'240','D':'day','W':'week','M':'month'}
   const mult = ['D','W','M'].includes(currentTF) ? 1 : (parseInt(currentTF)||2)
   const unit = ['D','W','M'].includes(currentTF) ? (currentTF==='D'?'day':currentTF==='W'?'week':'month') : 'minute'
-  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://api.polygon.io/v2/aggs/ticker/${polySym}/range/${mult}/${unit}/${from}/${to}?adjusted=true&sort=asc&limit=200&apiKey=${apiKey}`)}`
+  const proxyUrl = `https://oliver-proxy.vercel.app/api/polygon?symbol=${encodeURIComponent(polySym)}&multiplier=${mult}&timespan=${unit}&from=${from}&to=${to}&apikey=${apiKey}`
   try {
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
-    if (!res.ok) return null
-    const text = await res.text()
-    const data = JSON.parse(text)
-    if (!data.results) return null
+    if (!res.ok) { console.warn('Polygon proxy HTTP', res.status, polySym); return null }
+    const data = await res.json()
+    if (!data.results || data.results.length === 0) {
+      console.warn('Polygon empty:', polySym, data.status)
+      return null
+    }
+    console.log(`Polygon ✓ ${polySym}: ${data.results.length} bars`)
     return data.results.map(b => ({ c:b.c, o:b.o, h:b.h, l:b.l }))
-  } catch(e) { return null }
+  } catch(e) {
+    console.warn('Polygon error:', polySym, e.message)
+    return null
+  }
 }
 
 async function fetchAlpaca(sym) {
@@ -1596,12 +1601,24 @@ async function fetchTradier(sym) {
 
 // ── Ticker maps for each provider ─────────────────────────────
 const POLY_MAP = {
+  // Indices
   'SPX':'I:SPX','NDX':'I:NDX','DJI':'I:DJI','RUT':'I:RUT','VIX':'I:VIX',
-  'EURUSD':'C:EURUSD','GBPUSD':'C:GBPUSD','XAUUSD':'C:XAUUSD','XAGUSD':'C:XAGUSD',
-  'USDJPY':'C:USDJPY','AUDUSD':'C:AUDUSD',
+  'DAX':'I:DAX','FTSE':'I:UKX','HSI':'I:HSI','NKY':'I:NKY','CAC':'I:PX1',
+  // Forex
+  'EURUSD':'C:EURUSD','GBPUSD':'C:GBPUSD','USDJPY':'C:USDJPY',
+  'AUDUSD':'C:AUDUSD','USDCAD':'C:USDCAD','EURGBP':'C:EURGBP',
+  'USDMXN':'C:USDMXN','GBPJPY':'C:GBPJPY',
+  'XAUUSD':'C:XAUUSD','XAGUSD':'C:XAGUSD',
+  // Crypto
   'BTCUSD':'X:BTCUSD','ETHUSD':'X:ETHUSD','SOLUSD':'X:SOLUSD','BNBUSD':'X:BNBUSD',
-  'XRPUSD':'X:XRPUSD','ADAUSD':'X:ADAUSD',
-  'NQ1!':'NQ','ES1!':'ES','CL1!':'CL','GC1!':'GC','SI1!':'SI','YM1!':'YM'
+  'XRPUSD':'X:XRPUSD','ADAUSD':'X:ADAUSD','AVAXUSD':'X:AVAXUSD',
+  'DOTUSD':'X:DOTUSD','MATICUSD':'X:MATICUSD','LINKUSD':'X:LINKUSD',
+  // Stocks
+  'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
+  'META':'META','GOOGL':'GOOGL','AMD':'AMD','NFLX':'NFLX','GS':'GS',
+  // Futures
+  'NQ1!':'NQ','ES1!':'ES','CL1!':'CL','GC1!':'GC','SI1!':'SI',
+  'YM1!':'YM','ZB1!':'ZB','NG1!':'NG','ZC1!':'ZC','HG1!':'HG'
 }
 const ALPA_MAP = {
   'NVDA':'NVDA','AAPL':'AAPL','TSLA':'TSLA','MSFT':'MSFT','AMZN':'AMZN',
@@ -1993,7 +2010,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v31_LIVE.html"
+  a.download = "Olivers_Scanner_v32_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2119,8 +2136,8 @@ updateClock()
   <div class="api-provider" id="prov-polygon" onclick="selectProvider('polygon')">
     <div class="provider-dot" style="background:#ffe600"></div>
     <div>
-      <div class="api-provider-name">Polygon.io</div>
-      <div class="api-provider-tier">PAID · Stocks ✓ Forex ✓ Crypto ✓ · Institutional grade · &lt;50ms</div>
+      <div class="api-provider-name">Polygon.io ⭐ RECOMMENDED</div>
+      <div class="api-provider-tier">$29/mo · Stocks ✓ Forex ✓ Crypto ✓ Indices ✓ · 1min bars · Via Vercel proxy</div>
     </div>
     <div class="api-provider-price">$29/mo</div>
   </div>
