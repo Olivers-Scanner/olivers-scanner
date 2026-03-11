@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 30                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 31                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v30</title>
+<title>Oliver's Scanner v31</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v30</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v31</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1332,7 +1332,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v30'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v31'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1695,9 +1695,12 @@ const FMP_SYM = {
   'XAUUSD':'GCUSD','XAGUSD':'SIUSD',
   // Crypto
   'BTCUSD':'BTCUSD','ETHUSD':'ETHUSD','SOLUSD':'SOLUSD',
-  'BNBUSD':'BNBUSD','XRPUSD':'XRPUSD',
+  'BNBUSD':'BNBUSD','XRPUSD':'XRPUSD','ADAUSD':'ADAUSD',
+  'AVAXUSD':'AVAXUSD','DOTUSD':'DOTUSD','MATICUSD':'MATICUSD','LINKUSD':'LINKUSD',
   // Futures → closest FMP equivalent
-  'NQ1!':'QQQ','ES1!':'SPY','CL1!':'CLUSD','GC1!':'GCUSD'
+  'NQ1!':'QQQ','ES1!':'SPY','CL1!':'USO','GC1!':'GCUSD',
+  'SI1!':'SIUSD','YM1!':'DIA','ZB1!':'TLT','NG1!':'NGUSD',
+  'ZC1!':'ZCUSD','HG1!':'HGUSD'
 }
 
 // Map our TF strings → FMP interval strings
@@ -1990,7 +1993,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v30_LIVE.html"
+  a.download = "Olivers_Scanner_v31_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
