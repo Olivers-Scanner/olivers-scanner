@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 44                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 45                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v44</title>
+<title>Oliver's Scanner v45</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v44</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v45</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1023,6 +1023,7 @@ function playTone(freqs, durations, type='sine', vol=0.3) {
   if (!soundEnabled) return
   try {
     const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') ctx.resume()
     let t = ctx.currentTime
     freqs.forEach((freq, i) => {
       const osc  = ctx.createOscillator()
@@ -1065,9 +1066,16 @@ function toggleSound() {
   soundEnabled = !soundEnabled
   const btn = document.getElementById('soundBtn')
   if (btn) btn.textContent = soundEnabled ? '🔔' : '🔕'
-  // Unlock audio context on first user interaction
-  if (soundEnabled) getAudioCtx()
+  // Unlock + resume AudioContext on user gesture
+  const ctx = getAudioCtx()
+  if (ctx.state === 'suspended') ctx.resume()
+  if (soundEnabled) {
+    // Play a tiny test tone so user knows sound is on
+    playTone([880], [0.1], 'sine', 0.15)
+  }
 }
+
+let alertsReady = false  // skip first scan to seed prevSignals
 
 function checkAlerts() {
   SECTIONS.forEach(sec => sec.syms.forEach(s => {
@@ -1076,15 +1084,16 @@ function checkAlerts() {
     const prev = prevSignals[s.sym]
     const curr = d.signal
 
-    // Only alert on NEW signals (transition into buy/sell/btrade)
-    if (curr !== prev) {
-      if (curr === 'buy')         alertATrade(s.sym, 'buy')
-      else if (curr === 'sell')   alertATrade(s.sym, 'sell')
+    // Alert only on signal CHANGES after first scan
+    if (alertsReady && curr !== prev) {
+      if (curr === 'buy')              alertATrade(s.sym, 'buy')
+      else if (curr === 'sell')        alertATrade(s.sym, 'sell')
       else if (curr === 'btrade-buy')  alertBTrade(s.sym, 'buy')
       else if (curr === 'btrade-sell') alertBTrade(s.sym, 'sell')
     }
     prevSignals[s.sym] = curr
   }))
+  alertsReady = true  // after first pass, enable alerts
 }
 
 function runScan() {
@@ -2178,7 +2187,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v44_LIVE.html"
+  a.download = "Olivers_Scanner_v45_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
