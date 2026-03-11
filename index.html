@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 55                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 56                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v55</title>
+<title>Oliver's Scanner v56</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v55</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v56</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1509,7 +1509,7 @@ function _maskKey(k) {
 }
 
 // ── Runtime key vars (in-memory only, never logged) ──────────
-let currentProvider = localStorage.getItem('ov_provider') || 'yahoo'
+let currentProvider = localStorage.getItem('ov_provider') || 'fmp'
 let apiKey    = ''
 let apiSecret = ''
 
@@ -2030,10 +2030,8 @@ function connectFinnhubWS(key) {
 
     finnhubWS.onclose = () => {
       console.log('Finnhub WS closed')
-      if (scanningActive && currentProvider === 'finnhub') {
-        console.log('Reconnecting in 5s...')
-        finnhubReconnectTimer = setTimeout(() => connectFinnhubWS(finnhubKey), 5000)
-      }
+      // Finnhub WS disabled — reconnect only if explicitly using finnhub
+      if (false) {}
     }
   } catch(e) {
     console.warn('Finnhub WS failed to open:', e.message)
@@ -2429,7 +2427,7 @@ async function fetchLiveData() {
 
 async function startLiveData() {
   if (!scanningActive) {
-    currentProvider = localStorage.getItem('ov_provider') || 'yahoo'
+    currentProvider = localStorage.getItem('ov_provider') || 'fmp'
     scanningActive = true
     demoMode = false
     liveAlertPass = 0
