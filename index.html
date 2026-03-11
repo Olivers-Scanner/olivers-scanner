@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 34                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 38                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v34</title>
+<title>Oliver's Scanner v38</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v34</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v38</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -863,6 +863,7 @@ const vis = JSON.parse(localStorage.getItem('ov_sec_vis')||'{"indices":3,"stock"
 // ══════════════════════════════════════════════════════════════
 const hist = {}
 const histFull = {}
+const liveQuote = {}
 let demoMode = true
 
 function initHist() {
@@ -1061,7 +1062,8 @@ function renderAll() {
     const pr = document.getElementById(`price-${s.sym}`)
     if(pr) {
       // Always read latest price from hist[] directly — not stale scanData
-      const livePrice = hist[s.sym] ? hist[s.sym][hist[s.sym].length-1] : d.price
+      const lastBar = hist[s.sym] ? hist[s.sym][hist[s.sym].length-1] : null
+      const livePrice = liveQuote[s.sym] || (typeof lastBar === "number" ? lastBar : (lastBar && lastBar.c ? lastBar.c : d.price))
       pr.textContent = fmt(livePrice, s.mkt)
     }
     const chg = document.getElementById(`chg-${s.sym}`)
@@ -1332,7 +1334,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v34'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-stable'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -2036,6 +2038,44 @@ async function fetchLiveData() {
 }
 
 
+
+// ── LIVE QUOTE TICKER (every 7s) ─────────────────────────────
+let quoteInterval = null
+
+async function fetchLiveQuotes() {
+  if (!scanningActive || !apiKey) return
+  const allSyms = []
+  SECTIONS.forEach(sec => sec.syms.forEach(s => allSyms.push(s)))
+  const BATCH = 20
+  for (let i = 0; i < allSyms.length; i += BATCH) {
+    const batch = allSyms.slice(i, i + BATCH)
+    const fmpSyms = batch.map(s => FMP_SYM[s.sym] || s.sym).join(',')
+    const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${fmpSyms}&apikey=${apiKey}`
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const quotes = await res.json()
+      if (!Array.isArray(quotes)) continue
+      quotes.forEach(q => {
+        if (!q || !q.symbol || !q.price) return
+        batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
+             .forEach(m => { liveQuote[m.sym] = parseFloat(q.price) })
+      })
+    } catch(e) {}
+  }
+  renderAll()
+}
+
+function startQuoteTicker() {
+  stopQuoteTicker()
+  fetchLiveQuotes()
+  quoteInterval = setInterval(fetchLiveQuotes, 7000)
+}
+
+function stopQuoteTicker() {
+  if (quoteInterval) { clearInterval(quoteInterval); quoteInterval = null }
+}
+
 async function startLiveData() {
   if (!scanningActive) {
     currentProvider = localStorage.getItem('ov_provider') || 'fmp'
@@ -2062,7 +2102,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v34_LIVE.html"
+  a.download = "Olivers_Scanner_v38_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2079,6 +2119,7 @@ function toggleScanning() {
     scanInterval = null
     scanningActive = false
     demoMode = true
+    stopQuoteTicker()
     btn.textContent = '▶ START SCAN'
     btn.style.background = '#00ff88'
     btn.style.color = '#000'
