@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 47                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 48                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v47</title>
+<title>Oliver's Scanner v48</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v47</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v48</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -2111,8 +2111,12 @@ async function fetchLiveQuotes() {
 
 function startQuoteTicker() {
   stopQuoteTicker()
-  fetchLiveQuotes()
-  quoteInterval = setInterval(fetchLiveQuotes, 7000)
+  // Wait for apiKey to be available before first fetch
+  setTimeout(() => {
+    if (!apiKey) { console.warn('Quote ticker: no API key, retrying...'); startQuoteTicker(); return }
+    fetchLiveQuotes()
+    quoteInterval = setInterval(fetchLiveQuotes, 7000)
+  }, 2000)
 }
 
 function stopQuoteTicker() {
@@ -2169,6 +2173,7 @@ async function startLiveData() {
     demoMode = false
     liveAlertPass = 0
     alertsReady = false
+    Object.keys(prevSignals).forEach(k => delete prevSignals[k])
     const btn = document.getElementById('startStopBtn')
     if(btn){ btn.textContent = '■ STOP SCAN'; btn.style.background='#ff4444'; btn.style.color='#fff' }
     document.getElementById('live-indicator').textContent = `◌ Connecting to ${currentProvider.toUpperCase()}...`
@@ -2190,7 +2195,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v47_LIVE.html"
+  a.download = "Olivers_Scanner_v48_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
