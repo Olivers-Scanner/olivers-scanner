@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 34                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 41                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v34</title>
+<title>Oliver's Scanner v41</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v34</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v41</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -890,81 +890,108 @@ let currentTF = '2', currentTFLabel = '2 Min'
 const scanData = {}
 
 function computeOV(s) {
-  const h = hist[s.sym]; if (!h||h.length<22) return null
+  const hf = histFull[s.sym]   // real OHLCV bars [{o,h,l,c,v}]
+  const h  = hist[s.sym]       // close prices for MA calcs
+  if (!hf || hf.length < 22 || !h || h.length < 22) return null
+
   const n = h.length
-  const sma = (p) => { const sl=h.slice(Math.max(0,n-p),n); return sl.reduce((a,b)=>a+b,0)/sl.length }
-  const close=h[n-1], open=h[n-3]||close
-  const high=Math.max(close,open)*(1+.0012*Math.random())
-  const low =Math.min(close,open)*(1-.0012*Math.random())
-  const ma20=sma(20), ma200=sma(200)
-  const mid=(ma20+ma200)/2||1
-  const gap=Math.abs(ma20-ma200)/mid*100
 
-  const f1 = gap<=0.5
-  const f2long=close>ma20&&close>ma200, f2short=close<ma20&&close<ma200
-  const f2=f2long||f2short
+  // ── Real OHLC from latest bar ────────────────────────────────
+  const bar   = hf[hf.length - 1]
+  const close = bar.c, open = bar.o, high = bar.h, low = bar.l
 
-  const body=Math.abs(close-open), range=high-low||.0001
-  const prevB=h.slice(n-12,n-2).map((p,i,a)=>i>0?Math.abs(p-a[i-1]):0)
-  const avgB=prevB.reduce((a,b)=>a+b,0)/prevB.length||.0001
-  const isGreen=close>=open, isEleph=body>=1.5*avgB
-  const lWick=Math.min(open,close)-low, uWick=high-Math.max(open,close)
-  const isBotTail=lWick/range>=.55, isTopTail=uWick/range>=.55
-  const p1=h[n-2],p2=h[n-3]
-  const colorLong=isGreen&&p1<p2&&close>ma20, colorShort=!isGreen&&p1>p2&&close<ma20
-  const f3long=(isEleph&&isGreen)||isBotTail||colorLong
-  const f3short=(isEleph&&!isGreen)||isTopTail||colorShort
-  const f3=f3long||f3short
-  let barType='—',barIcon=''
-  if(isEleph){barType='Elephant Bar';barIcon='▮'}
-  else if(isBotTail){barType='Bottom Tail';barIcon='↑'}
-  else if(isTopTail){barType='Top Tail';barIcon='↓'}
-  else if(colorLong||colorShort){barType='Color Game';barIcon='◈'}
+  // ── MAs on close history ─────────────────────────────────────
+  const sma = (p) => { const sl = h.slice(Math.max(0,n-p),n); return sl.reduce((a,b)=>a+b,0)/sl.length }
+  const ma20 = sma(20), ma200 = sma(200)
+  const mid  = (ma20 + ma200) / 2 || 1
+  const gap  = Math.abs(ma20 - ma200) / mid * 100
 
-  const ny=new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}))
-  const mins=ny.getHours()*60+ny.getMinutes(), wd=ny.getDay(), isWD=wd>=1&&wd<=5
-  const isSwing=['60','240','D','W','M'].includes(currentTF)
-  let f4=false
-  if(isSwing){
-    if((s.mkt==='stock'||s.mkt==='indices'||s.mkt==='futures')&&isWD&&mins>=570&&mins<960) f4=true
-    if(s.mkt==='forex') f4=true
-    if(s.mkt==='crypto') f4=true
+  // ── F1: MAs squeezed together ────────────────────────────────
+  const f1 = gap <= 0.5
+
+  // ── F2: Price location vs MAs ────────────────────────────────
+  const f2long  = close > ma20 && close > ma200
+  const f2short = close < ma20 && close < ma200
+  const f2 = f2long || f2short
+
+  // ── F3: Bar pattern — uses REAL OHLC ─────────────────────────
+  const body  = Math.abs(close - open)
+  const range = high - low || 0.0001
+
+  // Average body of last 10 real bars (not random)
+  const recentBars = hf.slice(Math.max(0, hf.length - 11), hf.length - 1)
+  const avgBody = recentBars.reduce((a,b) => a + Math.abs(b.c - b.o), 0) / (recentBars.length || 1) || 0.0001
+
+  const isGreen = close >= open
+  const isEleph = body >= 1.5 * avgBody
+
+  const lWick = Math.min(open, close) - low
+  const uWick = high - Math.max(open, close)
+  const isBotTail = lWick / range >= 0.55
+  const isTopTail = uWick / range >= 0.55
+
+  // Color Game: reversal bar + MA confirmation
+  const prevBar   = hf[hf.length - 2]
+  const prevGreen = prevBar ? prevBar.c >= prevBar.o : false
+  const colorLong  = isGreen  && !prevGreen && close > ma20
+  const colorShort = !isGreen && prevGreen  && close < ma20
+
+  const f3long  = (isEleph && isGreen)  || isBotTail || colorLong
+  const f3short = (isEleph && !isGreen) || isTopTail  || colorShort
+  const f3 = f3long || f3short
+
+  let barType = '—', barIcon = ''
+  if      (isEleph)              { barType = 'Elephant Bar'; barIcon = '▮' }
+  else if (isBotTail)            { barType = 'Bottom Tail';  barIcon = '↑' }
+  else if (isTopTail)            { barType = 'Top Tail';     barIcon = '↓' }
+  else if (colorLong||colorShort){ barType = 'Color Game';   barIcon = '◈' }
+
+  // ── F4: Session window ───────────────────────────────────────
+  const ny   = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}))
+  const mins = ny.getHours()*60+ny.getMinutes(), wd = ny.getDay(), isWD = wd>=1&&wd<=5
+  const isSwing = ['60','240','D','W','M'].includes(currentTF)
+  let f4 = false
+  if (isSwing) {
+    if ((s.mkt==='stock'||s.mkt==='indices'||s.mkt==='futures') && isWD && mins>=570 && mins<960) f4=true
+    if (s.mkt==='forex')  f4=true
+    if (s.mkt==='crypto') f4=true
   } else {
-    if((s.mkt==='stock'||s.mkt==='indices'||s.mkt==='futures')&&isWD&&mins>=570&&mins<590) f4=true
-    if(s.mkt==='forex'&&((mins>=180&&mins<200)||(isWD&&mins>=480&&mins<500))) f4=true
-    if(s.mkt==='crypto') f4=true
+    if ((s.mkt==='stock'||s.mkt==='indices'||s.mkt==='futures') && isWD && mins>=570 && mins<590) f4=true
+    if (s.mkt==='forex' && ((mins>=180&&mins<200)||(isWD&&mins>=480&&mins<500))) f4=true
+    if (s.mkt==='crypto') f4=true
   }
-  const f5=true
 
-  // Narrowing/Expanding
-  const n2=h.length-3
-  let prevGap=gap
-  if(n2>=200){
-    const s20=h.slice(Math.max(0,n2-20),n2).reduce((a,b)=>a+b,0)/20
-    const s200=h.slice(Math.max(0,n2-200),n2).reduce((a,b)=>a+b,0)/200
-    const m2=(s20+s200)/2||1
-    prevGap=Math.abs(s20-s200)/m2*100
+  // ── F5: Timeframe confirmation (always true) ─────────────────
+  const f5 = true
+
+  // ── Narrowing / Expanding ────────────────────────────────────
+  const n2 = h.length - 3
+  let prevGap = gap
+  if (n2 >= 200) {
+    const s20  = h.slice(Math.max(0,n2-20), n2).reduce((a,b)=>a+b,0)/20
+    const s200 = h.slice(Math.max(0,n2-200),n2).reduce((a,b)=>a+b,0)/200
+    const m2   = (s20+s200)/2||1
+    prevGap = Math.abs(s20-s200)/m2*100
   }
-  const isNarrowing=gap<prevGap&&gap>0.5
-  const isExpanding=gap>prevGap&&gap>0.5
+  const isNarrowing = gap < prevGap && gap > 0.5
+  const isExpanding = gap > prevGap && gap > 0.5
 
-  const count=[f1,f2,f3,f4,f5].filter(Boolean).length
-  const allGo=f1&&f2&&f3&&f4&&f5
-
-  // B-TRADE: exactly 4/5 filters passing (any one missing)
-  const bTradeLong = count===4 && f2long && !allGo
+  // ── Signal ───────────────────────────────────────────────────
+  const count   = [f1,f2,f3,f4,f5].filter(Boolean).length
+  const allGo   = f1&&f2&&f3&&f4&&f5
+  const bTradeLong  = count===4 && f2long  && !allGo
   const bTradeShort = count===4 && f2short && !allGo
 
-  let signal='none'
-  if(allGo&&f2long) signal='buy'
-  else if(allGo&&f2short) signal='sell'
-  else if(bTradeLong) signal='btrade-buy'
-  else if(bTradeShort) signal='btrade-sell'
-  else if(count>=3) signal='hold'
-  else if(isNarrowing) signal='narrow'
-  else if(isExpanding) signal='expand'
+  let signal = 'none'
+  if      (allGo && f2long)   signal = 'buy'
+  else if (allGo && f2short)  signal = 'sell'
+  else if (bTradeLong)        signal = 'btrade-buy'
+  else if (bTradeShort)       signal = 'btrade-sell'
+  else if (count >= 3)        signal = 'hold'
+  else if (isNarrowing)       signal = 'narrow'
+  else if (isExpanding)       signal = 'expand'
 
-  const prev20=h[n-21]||close
+  const prev20 = h[n-21] || close
   return {
     f1,f2,f2long,f2short,f3,f4,f5,barType,barIcon,signal,count,
     gap:parseFloat(gap.toFixed(3)),price:close,
@@ -2062,7 +2089,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v34_LIVE.html"
+  a.download = "Olivers_Scanner_v41_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2216,4 +2243,3 @@ updateClock()
 
 </body>
 </html>
-
