@@ -1,9 +1,13 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 25                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 26                    ║ -->
 <!-- ║  Built: 2026-03-10                                          ║ -->
-<!-- ║  Changes from v24:                                          ║ -->
+<!-- ║  Changes from v25:
+<!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
+<!-- ║   • allorigins was being blocked by GitHub Pages CORS       ║ -->
+<!-- ║   • corsproxy.io works correctly from github.io domain      ║ -->
+<!-- ║   • Fixed response parsing (raw text not JSON wrapper)      ║ -->                                          ║ -->
 <!-- ║   • CRITICAL FIX: FMP endpoint updated                      ║ -->
 <!-- ║     OLD: /api/v3/historical-chart/ (DEAD - legacy)          ║ -->
 <!-- ║     NEW: /stable/historical-chart/ (LIVE)                   ║ -->
@@ -14,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v25</title>
+<title>Oliver's Scanner v26</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -651,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v25</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v26</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1327,7 +1331,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v25'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v26'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1483,12 +1487,12 @@ async function fetchYahoo(sym) {
   const interval = tfMap[currentTF] || '2m'
   const range = ['D','W','M'].includes(currentTF) ? '1y' : ['60','240'].includes(currentTF) ? '5d' : '2d'
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSym}?interval=${interval}&range=${range}&includePrePost=true`
-  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+  const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`
   try {
     const res = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    const json = await res.json()
-    const data = JSON.parse(json.contents)
+    const text = await res.text()
+    const data = JSON.parse(text)
     const chart = data?.chart?.result?.[0]
     if (!chart) return null
     const q = chart.indicators?.quote?.[0] || {}
@@ -1507,12 +1511,12 @@ async function fetchPolygon(sym) {
   const tfMap = {'1':'1','2':'2','3':'3','5':'5','10':'10','15':'15','30':'30','60':'60','240':'240','D':'day','W':'week','M':'month'}
   const mult = ['D','W','M'].includes(currentTF) ? 1 : (parseInt(currentTF)||2)
   const unit = ['D','W','M'].includes(currentTF) ? (currentTF==='D'?'day':currentTF==='W'?'week':'month') : 'minute'
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://api.polygon.io/v2/aggs/ticker/${polySym}/range/${mult}/${unit}/${from}/${to}?adjusted=true&sort=asc&limit=200&apiKey=${apiKey}`)}`
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://api.polygon.io/v2/aggs/ticker/${polySym}/range/${mult}/${unit}/${from}/${to}?adjusted=true&sort=asc&limit=200&apiKey=${apiKey}`)}`
   try {
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    const json = await res.json()
-    const data = JSON.parse(json.contents)
+    const text = await res.text()
+    const data = JSON.parse(text)
     if (!data.results) return null
     return data.results.map(b => ({ c:b.c, o:b.o, h:b.h, l:b.l }))
   } catch(e) { return null }
@@ -1543,15 +1547,15 @@ async function fetchTwelveData(sym) {
   const tfMap = {'1':'1min','2':'2min','3':'3min','4':'4min','5':'5min','10':'10min','15':'15min','30':'30min','60':'1h','240':'4h','D':'1day','W':'1week','M':'1month'}
   const interval = tfMap[currentTF] || '2min'
   
-  // Route through allorigins proxy to avoid CORS
+  // Route through corsproxy.io to avoid CORS
   const targetUrl = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(tdSym)}&interval=${interval}&outputsize=100&apikey=${apiKey}&format=JSON`
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
   
   try {
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    const json = await res.json()
-    const data = JSON.parse(json.contents)
+    const text = await res.text()
+    const data = JSON.parse(text)
     if (!data.values || data.status === 'error') {
       console.warn('TwelveData no data:', tdSym, data?.message)
       return null
@@ -1575,12 +1579,12 @@ async function fetchTradier(sym) {
   const tfMap = {'1':'1min','2':'2min','3':'5min','5':'5min','10':'15min','15':'15min','30':'30min','60':'60min','240':'60min'}
   const interval = tfMap[currentTF] || '2min'
   const targetUrl = `https://api.tradier.com/v1/markets/timesales?symbol=${trSym}&interval=${interval}&start=${new Date(Date.now()-2*86400000).toISOString().split('T')[0]}`
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
   try {
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    const json = await res.json()
-    const data = JSON.parse(json.contents)
+    const text = await res.text()
+    const data = JSON.parse(text)
     const series = data?.series?.data
     if (!series) return null
     return (Array.isArray(series) ? series : [series]).map(b => ({
@@ -1717,17 +1721,17 @@ async function fetchFMP(sym) {
   const srcMin = { '1min':1,'5min':5,'15min':15,'30min':30,
                    '1hour':60,'4hour':240,'1day':1440 }[interval] || 1
 
-  // Route through allorigins to bypass CORS
+  // Route through corsproxy.io to bypass CORS
   const target  = `https://financialmodelingprep.com/stable/historical-chart/${interval}/${fsym}?apikey=${apiKey}`
-  const proxy   = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`
+  const proxy   = `https://corsproxy.io/?${encodeURIComponent(target)}`
 
   try {
     const res  = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) { console.warn('FMP proxy HTTP', res.status, fsym); return null }
 
-    const json = await res.json()
+    const text = await res.text()
     let raw
-    try { raw = JSON.parse(json.contents) } catch(e) { console.warn('FMP parse err', fsym); return null }
+    try { raw = JSON.parse(text) } catch(e) { console.warn('FMP parse err', fsym, e.message); return null }
 
     // FMP returns [{date,open,high,low,close,volume}] newest-first
     if (!Array.isArray(raw) || raw.length === 0) {
@@ -1860,15 +1864,15 @@ async function fetchSymbolData(sym) {
   const yfSym = YF_MAP[sym]
   if (!yfSym) return null
   
-  // Use allorigins proxy to bypass CORS
+  // Use corsproxy.io to bypass CORS
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSym}?interval=2m&range=1d&includePrePost=true`
-  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+  const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`
   
   try {
     const res = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    const json = await res.json()
-    const data = JSON.parse(json.contents)
+    const text = await res.text()
+    const data = JSON.parse(text)
     const chart = data?.chart?.result?.[0]
     if (!chart) return null
     
@@ -1889,7 +1893,7 @@ async function fetchSymbolData(sym) {
   }
 }
 
-// Fetch symbols in small batches to prevent allorigins proxy from choking
+// Fetch symbols in small batches to prevent proxy from choking
 async function fetchBatch(syms) {
   return Promise.allSettled(syms.map(async s => {
     try {
@@ -1977,7 +1981,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v25_LIVE.html"
+  a.download = "Olivers_Scanner_v26_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
