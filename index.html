@@ -1,27 +1,20 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 23                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 24                    ║ -->
 <!-- ║  Built: 2026-03-10                                          ║ -->
-<!-- ║  Changes from v22:                                          ║ -->
-<!-- ║   • FIXED: Yahoo no longer auto-starts on load              ║ -->
-<!-- ║   • FIXED: Default fallback in switch → FMP not Yahoo       ║ -->
-<!-- ║   • FIXED: startLiveData() uses saved provider not Yahoo    ║ -->
-<!-- ║   • Yahoo still available as manual choice in settings      ║ -->
-<!-- ║  Security (carried from v21):                               ║ -->
-<!-- ║   • AES-256-GCM encrypted key storage                       ║ -->
-<!-- ║   • Masked key display (••••••••[last4])                    ║ -->
-<!-- ║   • Fields auto-cleared on panel close                      ║ -->
-<!-- ║  Data (carried from v20):                                   ║ -->
-<!-- ║   • FMP as default/recommended provider ($19/mo)            ║ -->
-<!-- ║   • 7 API providers: FMP·Finage·TwelveData·                 ║ -->
-<!-- ║     Finnhub·Polygon·Alpaca·Yahoo                            ║ -->
+<!-- ║  Changes from v23:                                          ║ -->
+<!-- ║   • CRITICAL FIX: FMP endpoint updated                      ║ -->
+<!-- ║     OLD: /api/v3/historical-chart/ (DEAD - legacy)          ║ -->
+<!-- ║     NEW: /stable/historical-chart/ (LIVE)                   ║ -->
+<!-- ║   • Fixes "Legacy Endpoint no longer supported" error       ║ -->
+<!-- ║   • All markets now return live data                        ║ -->
 <!-- ╚══════════════════════════════════════════════════════════════╝ -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v23</title>
+<title>Oliver's Scanner v24</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -1334,7 +1327,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v23'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v24'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1678,7 +1671,7 @@ async function fetchFinnhub(sym) {
 //  FMP — Financial Modeling Prep  ($19/mo Starter)
 //  Stocks · Forex · Crypto · Indices · Commodities
 //  Docs: financialmodelingprep.com/developer/docs
-//  Endpoint: /api/v3/historical-chart/{interval}/{symbol}?apikey=KEY
+//  Endpoint: /stable/historical-chart/{interval}/{symbol}?apikey=KEY
 //  Returns: [{date,open,high,low,close,volume},...] newest first
 // ══════════════════════════════════════════════════════════════
 
@@ -1725,7 +1718,7 @@ async function fetchFMP(sym) {
                    '1hour':60,'4hour':240,'1day':1440 }[interval] || 1
 
   // Route through allorigins to bypass CORS
-  const target  = `https://financialmodelingprep.com/api/v3/historical-chart/${interval}/${fsym}?apikey=${apiKey}`
+  const target  = `https://financialmodelingprep.com/stable/historical-chart/${interval}/${fsym}?apikey=${apiKey}`
   const proxy   = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`
 
   try {
@@ -1966,7 +1959,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v23_LIVE.html"
+  a.download = "Olivers_Scanner_v24_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
