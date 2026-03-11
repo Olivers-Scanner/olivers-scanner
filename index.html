@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 46                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 47                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v46</title>
+<title>Oliver's Scanner v47</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v46</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v47</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1076,7 +1076,8 @@ function toggleSound() {
   }
 }
 
-let alertsReady = false  // skip first scan to seed prevSignals
+let alertsReady = false   // only alert after first LIVE scan
+let liveAlertPass = 0     // count live scan passes
 
 function checkAlerts() {
   SECTIONS.forEach(sec => sec.syms.forEach(s => {
@@ -1084,8 +1085,7 @@ function checkAlerts() {
     if (!d) return
     const prev = prevSignals[s.sym]
     const curr = d.signal
-
-    // Alert only on signal CHANGES after first scan
+    // Only alert after 2nd live pass (first pass seeds prevSignals)
     if (alertsReady && curr !== prev) {
       if (curr === 'buy')              alertATrade(s.sym, 'buy')
       else if (curr === 'sell')        alertATrade(s.sym, 'sell')
@@ -1094,12 +1094,16 @@ function checkAlerts() {
     }
     prevSignals[s.sym] = curr
   }))
-  alertsReady = true  // after first pass, enable alerts
+}
+
+function liveCheckAlerts() {
+  liveAlertPass++
+  if (liveAlertPass >= 2) alertsReady = true
+  checkAlerts()
 }
 
 function runScan() {
   SECTIONS.forEach(sec=>sec.syms.forEach(s=>{ scanData[s.sym]=computeOV(s) }))
-  checkAlerts()
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2092,13 +2096,16 @@ async function fetchLiveQuotes() {
       const quotes = await res.json()
       if (!Array.isArray(quotes)) continue
       quotes.forEach(q => {
-        if (!q || !q.symbol || !q.price) return
-        // Map ALL our symbols that point to this FMP symbol
+        if (!q || !q.symbol) return
+        const price = q.price || q.previousClose || q.open
+        if (!price) return
         batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
-             .forEach(m => { liveQuote[m.sym] = parseFloat(q.price) })
+             .forEach(m => { liveQuote[m.sym] = parseFloat(price) })
       })
-    } catch(e) {}
+    } catch(e) { console.warn('Quote batch error:', e.message) }
   }
+  const updated = Object.keys(liveQuote).length
+  if (updated > 0) console.log(`Quote tick ✓ ${updated} prices`)
   renderAll()
 }
 
@@ -2150,6 +2157,7 @@ async function fetchLiveData() {
   }
 
   runScan()
+  liveCheckAlerts()
   renderAll()
 }
 
@@ -2159,6 +2167,8 @@ async function startLiveData() {
     currentProvider = localStorage.getItem('ov_provider') || 'fmp'
     scanningActive = true
     demoMode = false
+    liveAlertPass = 0
+    alertsReady = false
     const btn = document.getElementById('startStopBtn')
     if(btn){ btn.textContent = '■ STOP SCAN'; btn.style.background='#ff4444'; btn.style.color='#fff' }
     document.getElementById('live-indicator').textContent = `◌ Connecting to ${currentProvider.toUpperCase()}...`
@@ -2180,7 +2190,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v46_LIVE.html"
+  a.download = "Olivers_Scanner_v47_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2207,6 +2217,8 @@ function toggleScanning() {
     // START — disable demo, go live
     scanningActive = true
     demoMode = false
+    liveAlertPass = 0
+    alertsReady = false
     btn.textContent = '■ STOP SCAN'
     btn.style.background = '#ff4444'
     btn.style.color = '#fff'
