@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 43                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 44                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v43</title>
+<title>Oliver's Scanner v44</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -645,6 +645,7 @@ header     { padding-left: 20px; padding-right: 20px; }
   <div class="gate-right">
     <button onclick="downloadScanner()" style="background:none;border:1px solid rgba(255,230,0,0.4);color:#ffe600;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;padding:4px 10px;cursor:pointer;margin-right:6px;">⬇ SAVE</button><button id="startStopBtn" onclick="toggleScanning()" style="background:#00ff88;color:#000;border:none;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;padding:5px 16px;cursor:pointer;font-weight:bold;margin-right:4px;">▶ START SCAN</button>
     <button onclick="openApiPanel()" style="background:none;border:1px solid rgba(0,180,255,0.3);color:rgba(0,180,255,0.8);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;padding:4px 10px;cursor:pointer;margin-right:8px;">⚡ API</button>
+    <button id="soundBtn" onclick="toggleSound()" title="Toggle sound alerts" style="background:none;border:1px solid rgba(255,230,0,0.4);color:#ffe600;font-family:'DM Mono',monospace;font-size:13px;padding:4px 10px;cursor:pointer;margin-right:8px;">🔔</button>
     <span id="live-indicator" style="font-size:10px;letter-spacing:1px;color:#888;margin-right:8px;">● DEMO</span>
     <div class="gate-session"><span class="sess-dot" id="sess-dot"></span><span id="sess-lbl">Pre-Market</span></div>
     <div class="gate-clock" id="clock">--:--:--</div>
@@ -655,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v43</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v44</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -2177,7 +2178,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v43_LIVE.html"
+  a.download = "Olivers_Scanner_v44_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
