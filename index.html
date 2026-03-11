@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 40                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 34                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v40</title>
+<title>Oliver's Scanner v34</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v40</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v34</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1952,38 +1952,47 @@ let quoteInterval = null
 
 async function fetchLiveQuotes() {
   if (!scanningActive || !apiKey) return
-  const allSyms = []
-  SECTIONS.forEach(sec => sec.syms.forEach(s => allSyms.push(s)))
-  const BATCH = 20
-  for (let i = 0; i < allSyms.length; i += BATCH) {
-    const batch = allSyms.slice(i, i + BATCH)
-    const fmpSyms = batch.map(s => FMP_SYM[s.sym] || s.sym).join(',')
-    const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${fmpSyms}&apikey=${apiKey}`
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-      if (!res.ok) continue
-      const quotes = await res.json()
-      if (!Array.isArray(quotes)) continue
-      quotes.forEach(q => {
-        if (!q || !q.symbol || !q.price) return
-        batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
-             .forEach(m => { liveQuote[m.sym] = parseFloat(q.price) })
-      })
-    } catch(e) {}
+  const allSyms = SECTIONS.flatMap(s => s.syms)
+  
+  // Build FMP batch quote — comma-separated symbols (up to 50)
+  const fmpSyms = allSyms.map(s => FMP_SYM[s.sym] || s.sym).join(',')
+  const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${encodeURIComponent(fmpSyms)}&apikey=${apiKey}`
+  
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return
+    const quotes = await res.json()
+    if (!Array.isArray(quotes)) return
+
+    // Build lookup map by symbol
+    const qMap = {}
+    quotes.forEach(q => { if(q.symbol) qMap[q.symbol] = q })
+
+    // Update prices in hist[] so renderAll() shows live price
+    allSyms.forEach(s => {
+      const fsym = FMP_SYM[s.sym] || s.sym
+      const q = qMap[fsym]
+      if (!q || !q.price) return
+      if (!hist[s.sym]) hist[s.sym] = []
+      // Push live price into hist
+      hist[s.sym].push(q.price)
+      if (hist[s.sym].length > 300) hist[s.sym].shift()
+    })
+
+    renderAll()
+  } catch(e) {
+    // Silent fail — quote ticker is best-effort
   }
-  renderAll()
 }
 
 function startQuoteTicker() {
-  stopQuoteTicker()
-  fetchLiveQuotes()
+  if (quoteInterval) clearInterval(quoteInterval)
   quoteInterval = setInterval(fetchLiveQuotes, 7000)
 }
 
 function stopQuoteTicker() {
   if (quoteInterval) { clearInterval(quoteInterval); quoteInterval = null }
 }
-
 
 async function fetchLiveData() {
   if (!scanningActive) return
@@ -2053,7 +2062,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v40_LIVE.html"
+  a.download = "Olivers_Scanner_v34_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2207,3 +2216,4 @@ updateClock()
 
 </body>
 </html>
+
