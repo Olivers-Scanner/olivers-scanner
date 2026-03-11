@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v27</title>
+<title>Oliver's Scanner v28</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v27</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v28</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1331,7 +1331,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v27'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v28'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1650,7 +1650,7 @@ const FINNHUB_MAP = {
 async function fetchFinnhub(sym) {
   const fsym = FINNHUB_MAP[sym] || sym
   const type = getSymType(sym)
-  const proxyBase = "https://oliver-proxy-11csfguz3-harrison-s-projects-b26b59a4.vercel.app"
+  const proxyBase = "https://oliver-proxy.vercel.app"
   
   try {
     const url = `${proxyBase}/api/finnhub?symbol=${encodeURIComponent(fsym)}&type=${type}`
@@ -1713,7 +1713,7 @@ function getFMPInterval(tf) {
 // ── OUR OWN VERCEL PROXY — no third party, no rate limits, key server-side ──
 // Repo: github.com/Olivers-Scanner/oliver-proxy
 // Add api/fmp.js to that repo + set FMP_KEY env var in Vercel dashboard
-const FMP_VERCEL_PROXY = 'https://oliver-proxy-11csfguz3-harrison-s-projects-b26b59a4.vercel.app/api/fmp'
+const FMP_VERCEL_PROXY = 'https://oliver-proxy.vercel.app/api/fmp'
 
 async function fetchFMP(sym) {
   const fsym     = FMP_SYM[sym] || sym
@@ -1989,7 +1989,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v27_LIVE.html"
+  a.download = "Olivers_Scanner_v28_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
