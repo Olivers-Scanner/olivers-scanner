@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 32                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 33                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v32</title>
+<title>Oliver's Scanner v33</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v32</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v33</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1332,7 +1332,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v32'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v33'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1943,6 +1943,57 @@ async function fetchBatch(syms) {
   }))
 }
 
+
+// ══════════════════════════════════════════════════════════════
+//  LIVE QUOTE TICKER — FMP /stable/quote every 7 seconds
+//  Updates prices only (not signals) for live tick feel
+// ══════════════════════════════════════════════════════════════
+let quoteInterval = null
+
+async function fetchLiveQuotes() {
+  if (!scanningActive || !apiKey) return
+  const allSyms = SECTIONS.flatMap(s => s.syms)
+  
+  // Build FMP batch quote — comma-separated symbols (up to 50)
+  const fmpSyms = allSyms.map(s => FMP_SYM[s.sym] || s.sym).join(',')
+  const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${encodeURIComponent(fmpSyms)}&apikey=${apiKey}`
+  
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return
+    const quotes = await res.json()
+    if (!Array.isArray(quotes)) return
+
+    // Build lookup map by symbol
+    const qMap = {}
+    quotes.forEach(q => { if(q.symbol) qMap[q.symbol] = q })
+
+    // Update prices in hist[] so renderAll() shows live price
+    allSyms.forEach(s => {
+      const fsym = FMP_SYM[s.sym] || s.sym
+      const q = qMap[fsym]
+      if (!q || !q.price) return
+      if (!hist[s.sym]) hist[s.sym] = []
+      // Push live price into hist
+      hist[s.sym].push(q.price)
+      if (hist[s.sym].length > 300) hist[s.sym].shift()
+    })
+
+    renderAll()
+  } catch(e) {
+    // Silent fail — quote ticker is best-effort
+  }
+}
+
+function startQuoteTicker() {
+  if (quoteInterval) clearInterval(quoteInterval)
+  quoteInterval = setInterval(fetchLiveQuotes, 7000)
+}
+
+function stopQuoteTicker() {
+  if (quoteInterval) { clearInterval(quoteInterval); quoteInterval = null }
+}
+
 async function fetchLiveData() {
   if (!scanningActive) return
   const allSyms = SECTIONS.flatMap(s => s.syms)
@@ -2002,6 +2053,7 @@ async function startLiveData() {
       'D':86400000,'W':604800000,'M':2592000000
     }
     scanInterval = setInterval(fetchLiveData, tfMs[currentTF] || 120000)
+    startQuoteTicker()
   }
 }
 
@@ -2010,7 +2062,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v32_LIVE.html"
+  a.download = "Olivers_Scanner_v33_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -2031,6 +2083,7 @@ function toggleScanning() {
     btn.style.background = '#00ff88'
     btn.style.color = '#000'
     document.getElementById('live-indicator').textContent = '● DEMO MODE — Click ▶ START SCAN for live data'
+    stopQuoteTicker()
     document.getElementById('live-indicator').style.color = '#888'
   } else {
     // START — disable demo, go live
