@@ -1,9 +1,9 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 24                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 25                    ║ -->
 <!-- ║  Built: 2026-03-10                                          ║ -->
-<!-- ║  Changes from v23:                                          ║ -->
+<!-- ║  Changes from v24:                                          ║ -->
 <!-- ║   • CRITICAL FIX: FMP endpoint updated                      ║ -->
 <!-- ║     OLD: /api/v3/historical-chart/ (DEAD - legacy)          ║ -->
 <!-- ║     NEW: /stable/historical-chart/ (LIVE)                   ║ -->
@@ -14,7 +14,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v24</title>
+<title>Oliver's Scanner v25</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -651,7 +651,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v24</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v25</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1327,7 +1327,7 @@ async function _deriveKey() {
   const enc   = new TextEncoder()
   const base  = await crypto.subtle.importKey('raw', enc.encode(_salt), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('ov-scanner-v24'), iterations:100000, hash:'SHA-256' },
+    { name:'PBKDF2', salt:enc.encode('ov-scanner-v25'), iterations:100000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   )
 }
@@ -1485,7 +1485,7 @@ async function fetchYahoo(sym) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSym}?interval=${interval}&range=${range}&includePrePost=true`
   const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
   try {
-    const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
     const json = await res.json()
     const data = JSON.parse(json.contents)
@@ -1509,7 +1509,7 @@ async function fetchPolygon(sym) {
   const unit = ['D','W','M'].includes(currentTF) ? (currentTF==='D'?'day':currentTF==='W'?'week':'month') : 'minute'
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://api.polygon.io/v2/aggs/ticker/${polySym}/range/${mult}/${unit}/${from}/${to}?adjusted=true&sort=asc&limit=200&apiKey=${apiKey}`)}`
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
     const json = await res.json()
     const data = JSON.parse(json.contents)
@@ -1528,7 +1528,7 @@ async function fetchAlpaca(sym) {
   try {
     const res = await fetch(url, {
       headers: { 'APCA-API-KEY-ID': apiKey, 'APCA-API-SECRET-KEY': apiSecret },
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(15000)
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -1548,7 +1548,7 @@ async function fetchTwelveData(sym) {
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
   
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) })
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
     const json = await res.json()
     const data = JSON.parse(json.contents)
@@ -1577,7 +1577,7 @@ async function fetchTradier(sym) {
   const targetUrl = `https://api.tradier.com/v1/markets/timesales?symbol=${trSym}&interval=${interval}&start=${new Date(Date.now()-2*86400000).toISOString().split('T')[0]}`
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
     const json = await res.json()
     const data = JSON.parse(json.contents)
@@ -1650,7 +1650,7 @@ async function fetchFinnhub(sym) {
   
   try {
     const url = `${proxyBase}/api/finnhub?symbol=${encodeURIComponent(fsym)}&type=${type}`
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) { console.warn('Proxy HTTP', res.status, fsym); return null }
     const data = await res.json()
     if (!data.c || data.s === 'no_data' || data.c.length === 0) {
@@ -1722,7 +1722,7 @@ async function fetchFMP(sym) {
   const proxy   = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`
 
   try {
-    const res  = await fetch(proxy, { signal: AbortSignal.timeout(12000) })
+    const res  = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) { console.warn('FMP proxy HTTP', res.status, fsym); return null }
 
     const json = await res.json()
@@ -1793,7 +1793,7 @@ async function fetchFinage(sym) {
       url = `https://api.finage.co.uk/agg/stock/${fsym}/${timeStr}/${fromStr}/${toStr}?limit=100&sort=asc&apikey=${apiKey}`
     }
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) { console.warn('Finage HTTP', res.status, fsym); return null }
     const data = await res.json()
 
@@ -1865,7 +1865,7 @@ async function fetchSymbolData(sym) {
   const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
   
   try {
-    const res = await fetch(proxy, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
     const json = await res.json()
     const data = JSON.parse(json.contents)
@@ -1889,6 +1889,27 @@ async function fetchSymbolData(sym) {
   }
 }
 
+// Fetch symbols in small batches to prevent allorigins proxy from choking
+async function fetchBatch(syms) {
+  return Promise.allSettled(syms.map(async s => {
+    try {
+      const bars = await Promise.race([
+        fetchSymbolLive(s.sym),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('signal timed out')), 15000))
+      ])
+      if (bars && bars.length >= 5) {
+        hist[s.sym]     = bars.map(b => b.c)
+        histFull[s.sym] = bars
+        return true
+      }
+      return false
+    } catch(e) {
+      console.warn(`FMP fetch error: ${s.sym}`, e.message)
+      return false
+    }
+  }))
+}
+
 async function fetchLiveData() {
   if (!scanningActive) return
   const allSyms = SECTIONS.flatMap(s => s.syms)
@@ -1897,27 +1918,24 @@ async function fetchLiveData() {
   document.getElementById('live-indicator').textContent = `◌ Fetching ${currentProvider}...`
   document.getElementById('live-indicator').style.color = '#ffe600'
 
-  // Fetch ALL symbols in PARALLEL — much faster
-  const results = await Promise.allSettled(
-    allSyms.map(async s => {
-      try {
-        const bars = await Promise.race([
-          fetchSymbolLive(s.sym),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
-        ])
-        if (bars && bars.length >= 5) {
-          hist[s.sym] = bars.map(b => b.c)
-          histFull[s.sym] = bars
-          successCount++
-          return true
-        }
-        return false
-      } catch(e) {
-        console.warn('Failed:', s.sym, e.message)
-        return false
-      }
-    })
-  )
+  // Split into batches of 6 with 400ms gap — prevents proxy overload
+  const BATCH_SIZE = 6
+  const BATCH_DELAY = 400 // ms between batches
+
+  for (let i = 0; i < allSyms.length; i += BATCH_SIZE) {
+    const batch = allSyms.slice(i, i + BATCH_SIZE)
+    const results = await fetchBatch(batch)
+    successCount += results.filter(r => r.status === 'fulfilled' && r.value === true).length
+
+    // Update indicator as we go
+    document.getElementById('live-indicator').textContent =
+      `◌ Loading ${Math.min(i + BATCH_SIZE, allSyms.length)}/${allSyms.length}...`
+
+    // Small delay between batches (skip after last batch)
+    if (i + BATCH_SIZE < allSyms.length) {
+      await new Promise(r => setTimeout(r, BATCH_DELAY))
+    }
+  }
 
   if (successCount > 0) {
     demoMode = false
@@ -1959,7 +1977,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v24_LIVE.html"
+  a.download = "Olivers_Scanner_v25_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
