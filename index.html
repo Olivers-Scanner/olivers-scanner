@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 42                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 43                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v42</title>
+<title>Oliver's Scanner v43</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -655,7 +655,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v42</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v43</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -1005,8 +1005,90 @@ function computeOV(s) {
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════
+//  SOUND ALERT SYSTEM — Web Audio API (no external files)
+// ══════════════════════════════════════════════════════════════
+const prevSignals = {}   // sym -> last known signal
+let audioCtx = null
+let soundEnabled = true
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  return audioCtx
+}
+
+function playTone(freqs, durations, type='sine', vol=0.3) {
+  if (!soundEnabled) return
+  try {
+    const ctx = getAudioCtx()
+    let t = ctx.currentTime
+    freqs.forEach((freq, i) => {
+      const osc  = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = type
+      osc.frequency.setValueAtTime(freq, t)
+      gain.gain.setValueAtTime(vol, t)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + durations[i])
+      osc.start(t)
+      osc.stop(t + durations[i])
+      t += durations[i]
+    })
+  } catch(e) {}
+}
+
+function alertATrade(sym, direction) {
+  // A-TRADE: triumphant ascending 3-tone chime
+  if (direction === 'buy') {
+    playTone([523, 659, 784], [0.15, 0.15, 0.4], 'sine', 0.35)   // C5 E5 G5
+  } else {
+    playTone([784, 659, 523], [0.15, 0.15, 0.4], 'sine', 0.35)   // G5 E5 C5
+  }
+  console.log(`🔔 A-TRADE ${direction.toUpperCase()} — ${sym}`)
+}
+
+function alertBTrade(sym, direction) {
+  // B-TRADE: softer 2-tone ping
+  if (direction === 'buy') {
+    playTone([440, 554], [0.12, 0.3], 'sine', 0.2)   // A4 C#5
+  } else {
+    playTone([554, 440], [0.12, 0.3], 'sine', 0.2)   // C#5 A4
+  }
+  console.log(`🔔 B-TRADE ${direction.toUpperCase()} — ${sym}`)
+}
+
+
+function toggleSound() {
+  soundEnabled = !soundEnabled
+  const btn = document.getElementById('soundBtn')
+  if (btn) btn.textContent = soundEnabled ? '🔔' : '🔕'
+  // Unlock audio context on first user interaction
+  if (soundEnabled) getAudioCtx()
+}
+
+function checkAlerts() {
+  SECTIONS.forEach(sec => sec.syms.forEach(s => {
+    const d = scanData[s.sym]
+    if (!d) return
+    const prev = prevSignals[s.sym]
+    const curr = d.signal
+
+    // Only alert on NEW signals (transition into buy/sell/btrade)
+    if (curr !== prev) {
+      if (curr === 'buy')         alertATrade(s.sym, 'buy')
+      else if (curr === 'sell')   alertATrade(s.sym, 'sell')
+      else if (curr === 'btrade-buy')  alertBTrade(s.sym, 'buy')
+      else if (curr === 'btrade-sell') alertBTrade(s.sym, 'sell')
+    }
+    prevSignals[s.sym] = curr
+  }))
+}
+
 function runScan() {
   SECTIONS.forEach(sec=>sec.syms.forEach(s=>{ scanData[s.sym]=computeOV(s) }))
+  checkAlerts()
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2095,7 +2177,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v42_LIVE.html"
+  a.download = "Olivers_Scanner_v43_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
