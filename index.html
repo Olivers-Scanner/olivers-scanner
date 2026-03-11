@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->
-<!-- ║          OLIVER'S SCANNER  —  VERSION 45                    ║ -->
+<!-- ║          OLIVER'S SCANNER  —  VERSION 46                    ║ -->
 <!-- ║  Built: 2026-03-11                                          ║ -->
 <!-- ║  Changes from v25:                                          ║ -->
 <!-- ║   • CRITICAL FIX: Switched proxy allorigins→corsproxy.io    ║ -->
@@ -18,7 +18,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oliver's Scanner v45</title>
+<title>Oliver's Scanner v46</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 
@@ -656,7 +656,7 @@ header     { padding-left: 20px; padding-right: 20px; }
 <!-- ② HEADER -->
 <header>
   <div>
-    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v45</span></div>
+    <div class="h-title">Oliver's Scanner <span style="font-size:10px;color:#ffe600;font-family:'DM Mono',monospace;letter-spacing:2px;opacity:0.8;vertical-align:middle;">v46</span></div>
     <div class="h-sub">Minimalized · 5-Filter Gate · <span id="h-tf">2 Min</span></div>
   </div>
   <div class="h-right">
@@ -864,6 +864,7 @@ const vis = JSON.parse(localStorage.getItem('ov_sec_vis')||'{"indices":3,"stock"
 // ══════════════════════════════════════════════════════════════
 const hist = {}
 const histFull = {}
+const liveQuote = {}
 let demoMode = true
 
 function initHist() {
@@ -1184,7 +1185,8 @@ function renderAll() {
     const pr = document.getElementById(`price-${s.sym}`)
     if(pr) {
       // Always read latest price from hist[] directly — not stale scanData
-      const livePrice = hist[s.sym] ? hist[s.sym][hist[s.sym].length-1] : d.price
+      const lastClose = hist[s.sym] ? hist[s.sym][hist[s.sym].length-1] : d.price
+      const livePrice = liveQuote[s.sym] || lastClose
       pr.textContent = fmt(livePrice, s.mkt)
     }
     const chg = document.getElementById(`chg-${s.sym}`)
@@ -2077,41 +2079,32 @@ let quoteInterval = null
 
 async function fetchLiveQuotes() {
   if (!scanningActive || !apiKey) return
-  const allSyms = SECTIONS.flatMap(s => s.syms)
-  
-  // Build FMP batch quote — comma-separated symbols (up to 50)
-  const fmpSyms = allSyms.map(s => FMP_SYM[s.sym] || s.sym).join(',')
-  const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${encodeURIComponent(fmpSyms)}&apikey=${apiKey}`
-  
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return
-    const quotes = await res.json()
-    if (!Array.isArray(quotes)) return
-
-    // Build lookup map by symbol
-    const qMap = {}
-    quotes.forEach(q => { if(q.symbol) qMap[q.symbol] = q })
-
-    // Update prices in hist[] so renderAll() shows live price
-    allSyms.forEach(s => {
-      const fsym = FMP_SYM[s.sym] || s.sym
-      const q = qMap[fsym]
-      if (!q || !q.price) return
-      if (!hist[s.sym]) hist[s.sym] = []
-      // Push live price into hist
-      hist[s.sym].push(q.price)
-      if (hist[s.sym].length > 300) hist[s.sym].shift()
-    })
-
-    renderAll()
-  } catch(e) {
-    // Silent fail — quote ticker is best-effort
+  const allSyms = []
+  SECTIONS.forEach(sec => sec.syms.forEach(s => allSyms.push(s)))
+  const BATCH = 20
+  for (let i = 0; i < allSyms.length; i += BATCH) {
+    const batch = allSyms.slice(i, i + BATCH)
+    const fmpSyms = batch.map(s => FMP_SYM[s.sym] || s.sym).join(',')
+    const url = `https://oliver-proxy.vercel.app/api/fmp?endpoint=quote&symbol=${fmpSyms}&apikey=${apiKey}`
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const quotes = await res.json()
+      if (!Array.isArray(quotes)) continue
+      quotes.forEach(q => {
+        if (!q || !q.symbol || !q.price) return
+        // Map ALL our symbols that point to this FMP symbol
+        batch.filter(s => (FMP_SYM[s.sym] || s.sym) === q.symbol)
+             .forEach(m => { liveQuote[m.sym] = parseFloat(q.price) })
+      })
+    } catch(e) {}
   }
+  renderAll()
 }
 
 function startQuoteTicker() {
-  if (quoteInterval) clearInterval(quoteInterval)
+  stopQuoteTicker()
+  fetchLiveQuotes()
   quoteInterval = setInterval(fetchLiveQuotes, 7000)
 }
 
@@ -2187,7 +2180,7 @@ function downloadScanner() {
   const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = "Olivers_Scanner_v45_LIVE.html"
+  a.download = "Olivers_Scanner_v46_LIVE.html"
   a.click()
   URL.revokeObjectURL(a.href)
 }
